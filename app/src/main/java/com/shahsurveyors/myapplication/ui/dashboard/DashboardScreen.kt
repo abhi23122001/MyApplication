@@ -9,7 +9,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,7 +25,6 @@ import com.shahsurveyors.myapplication.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.*
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
     viewModel: DashboardViewModel,
@@ -75,6 +73,10 @@ fun DashboardScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = onRefresh) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = ShahWhite)
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
                     IconButton(onClick = { /* TODO: Notifications */ }) {
                         BadgedBox(badge = { Badge { Text("3") } }) {
                             Icon(Icons.Default.Notifications, contentDescription = "Notifications", tint = ShahWhite)
@@ -96,67 +98,59 @@ fun DashboardScreen(
             )
         }
     ) { padding ->
-        PullToRefreshBox(
-            isRefreshing = viewModel.isLoading,
-            onRefresh = onRefresh,
+        LazyColumn(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
-                .background(ShahGrey)
+                .background(ShahGrey),
+            contentPadding = PaddingValues(16.dp)
         ) {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp)
-            ) {
-                // Welcome Header
-                item {
-                    Column {
+            item {
+                Column {
+                    Text(
+                        text = "Welcome back, $userRole",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = ShahDarkGrey
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "Welcome back, $userRole",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = ShahDarkGrey
+                            text = userName,
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = ShahBlack,
+                            modifier = Modifier.weight(1f)
                         )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = userName,
-                                style = MaterialTheme.typography.headlineMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = ShahBlack,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Column(horizontalAlignment = Alignment.End) {
-                                Text(currentTime.value, style = MaterialTheme.typography.labelLarge, color = ShahGreen, fontWeight = FontWeight.Bold)
-                                Text(currentDate.value, style = MaterialTheme.typography.labelSmall, color = ShahMediumGrey)
-                            }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(currentTime.value, style = MaterialTheme.typography.labelLarge, color = ShahGreen, fontWeight = FontWeight.Bold)
+                            Text(currentDate.value, style = MaterialTheme.typography.labelSmall, color = ShahMediumGrey)
                         }
                     }
-                    Spacer(modifier = Modifier.height(24.dp))
                 }
-
-                // Summary Cards Section
-                item {
-                    SummarySection(viewModel, isAdmin)
-                    Spacer(modifier = Modifier.height(24.dp))
-                }
-
-                // Admin Broadcast Section
-                item {
-                    BroadcastSection(viewModel.noticeMessage.ifBlank { "No new admin announcements." })
-                    Spacer(modifier = Modifier.height(24.dp))
-                }
-
-                // Quick Actions Section
-                item {
-                    Text("Quick Actions", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.height(12.dp))
-                    QuickActionsGrid(
-                        onNavigateToAttendance, onNavigateToExpense, onNavigateToAdmin,
-                        onNavigateToBilling, isAdmin
-                    )
-                    Spacer(modifier = Modifier.height(24.dp))
-                }
+                Spacer(modifier = Modifier.height(24.dp))
             }
 
+            item {
+                SummarySection(viewModel, isAdmin)
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+
+            item {
+                BroadcastSection(viewModel.noticeMessage.ifBlank { "No new admin announcements." })
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+
+            item {
+                Text("Quick Actions", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(12.dp))
+                QuickActionsGrid(
+                    onNavigateToAttendance,
+                    onNavigateToExpense,
+                    onNavigateToAdmin,
+                    onNavigateToBilling,
+                    isAdmin
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+            }
         }
     }
 }
@@ -266,7 +260,6 @@ fun QuickActionsGrid(
                         Text(action.first, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
                     }
                 }
-                // Fill space if row is not full
                 if (rowActions.size < 2) {
                     Spacer(modifier = Modifier.weight(1f))
                 }
