@@ -26,20 +26,11 @@ class AdminViewModel(
     private val clientRepository: ClientRepository
 ) : ViewModel() {
 
-    // =========================================================
-    // LOADING / ERROR
-    // =========================================================
-
     var isLoading by mutableStateOf(false)
         private set
 
     var errorMessage by mutableStateOf<String?>(null)
         private set
-
-
-    // =========================================================
-    // DATA
-    // =========================================================
 
     var pendingUsers by mutableStateOf<List<UserProfile>>(emptyList())
         private set
@@ -53,21 +44,11 @@ class AdminViewModel(
     var attendanceSummary by mutableStateOf<List<AttendanceRecord>>(emptyList())
         private set
 
-
-    // =========================================================
-    // ATTENDANCE STATS
-    // =========================================================
-
     var presentCount by mutableIntStateOf(0)
         private set
 
     var absentCount by mutableIntStateOf(0)
         private set
-
-
-    // =========================================================
-    // ROOM FLOWS
-    // =========================================================
 
     val companyProfile: StateFlow<CompanyProfile?> =
         billingRepository.companyProfile.stateIn(
@@ -90,370 +71,146 @@ class AdminViewModel(
             initialValue = emptyList()
         )
 
-
-    // =========================================================
-    // FETCH ADMIN DATA
-    // =========================================================
-
     fun fetchAdminData() {
-
         if (isLoading) return
 
         viewModelScope.launch {
-
             isLoading = true
             errorMessage = null
 
             try {
+                val users = userRepository.getAllEmployees()
 
-                // -------------------------------------------------
-                // USERS
-                // -------------------------------------------------
+                pendingUsers = users.filter { !it.approved }
+                allEmployees = users
 
-                val users =
-                    userRepository.getAllEmployees()
+                val expenses = expenseRepository.getAllExpenses()
+                pendingExpenses = expenses.filter { it.status == "PENDING" }
 
-                val newPendingUsers =
-                    users.filter {
-                        !it.approved
-                    }
-
-                // Assign complete list at once
-                pendingUsers =
-                    newPendingUsers
-
-                allEmployees =
-                    users
-
-
-                // -------------------------------------------------
-                // EXPENSES
-                // -------------------------------------------------
-
-                val expenses =
-                    expenseRepository.getAllExpenses()
-
-                pendingExpenses =
-                    expenses.filter {
-                        it.status == "PENDING"
-                    }
-
-
-                // -------------------------------------------------
-                // ATTENDANCE
-                // -------------------------------------------------
-
-                loadTodayAttendance(users)
+                // IMPORTANT:
+                // Attendance must be loaded directly from today's attendance
+                // collection. Previously we looped through getAllEmployees()
+                // and called getTodayAttendance(uid). That silently hides valid
+                // attendance records when the punched-in user's profile is not
+                // returned by the employee-role query (role/profile mismatch,
+                // stale employee list, etc.).
+                loadTodayAttendance()
 
             } catch (e: Exception) {
-
                 e.printStackTrace()
-
-                errorMessage =
-                    e.localizedMessage
-                        ?: "Unable to load admin data"
-
+                errorMessage = e.localizedMessage ?: "Unable to load admin data"
             } finally {
-
                 isLoading = false
             }
         }
     }
 
-
-    // =========================================================
-    // LOAD TODAY ATTENDANCE
-    // =========================================================
-
-    private suspend fun loadTodayAttendance(
-        users: List<UserProfile>
-    ) {
-
-        val attendanceList =
-            mutableListOf<AttendanceRecord>()
-
-        /*
-         * Simple sequential loading.
-         *
-         * We intentionally don't use async/awaitAll here.
-         * This keeps the ViewModel state update predictable
-         * and avoids unnecessary Compose recompositions.
-         */
-
-        for (user in users) {
-
-            try {
-
-                val record =
-                    attendanceRepository
-                        .getTodayAttendance(
-                            user.uid
-                        )
-
-                if (record != null) {
-                    attendanceList.add(record)
-                }
-
-            } catch (e: Exception) {
-
-                e.printStackTrace()
-            }
+    /**
+     * Loads today's attendance directly from Firestore.
+     * This is the authoritative source for the Admin Attendance screen.
+     */
+    private suspend fun loadTodayAttendance() {
+        val attendanceList = try {
+            attendanceRepository.getTodayAllAttendance()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            emptyList()
         }
 
+        val sortedAttendance = attendanceList.sortedByDescending { record ->
+            record.punchInTime?.seconds ?: 0L
+        }
 
-        // ---------------------------------------------------------
-        // SORT
-        // ---------------------------------------------------------
-
-        val sortedAttendance =
-            attendanceList
-                .sortedByDescending {
-                    it.punchInTime?.seconds ?: 0L
-                }
-
-
-        // ---------------------------------------------------------
-        // SINGLE STATE UPDATE
-        // ---------------------------------------------------------
-
-        attendanceSummary =
-            sortedAttendance
-
-
-        // ---------------------------------------------------------
-        // PRESENT
-        // ---------------------------------------------------------
-
-        presentCount =
-            sortedAttendance.size
-
-
-        // ---------------------------------------------------------
-        // TOTAL
-        // ---------------------------------------------------------
-
-        val totalEmployees =
-            users.size
-
-
-        // ---------------------------------------------------------
-        // ABSENT
-        // ---------------------------------------------------------
-
-        absentCount =
-            (
-                    totalEmployees -
-                            presentCount
-                    ).coerceAtLeast(0)
+        attendanceSummary = sortedAttendance
+        presentCount = sortedAttendance.size
+        absentCount = (allEmployees.count { it.active } - presentCount)
+            .coerceAtLeast(0)
     }
-
-
-    // =========================================================
-    // REFRESH ATTENDANCE
-    // =========================================================
 
     fun refreshAttendance() {
-
         if (isLoading) return
 
         viewModelScope.launch {
-
             isLoading = true
             errorMessage = null
 
             try {
-
-                val users =
-                    userRepository.getAllEmployees()
-
-                allEmployees =
-                    users
-
-                loadTodayAttendance(
-                    users
-                )
-
+                allEmployees = userRepository.getAllEmployees()
+                loadTodayAttendance()
             } catch (e: Exception) {
-
                 e.printStackTrace()
-
-                errorMessage =
-                    e.localizedMessage
-                        ?: "Unable to refresh attendance"
-
+                errorMessage = e.localizedMessage ?: "Unable to refresh attendance"
             } finally {
-
                 isLoading = false
             }
         }
     }
 
-
-    // =========================================================
-    // APPROVE USER
-    // =========================================================
-
-    fun approveUser(
-        uid: String,
-        access: String
-    ) {
-
+    fun approveUser(uid: String, access: String) {
         viewModelScope.launch {
-
             try {
-
                 userRepository.updateUserStatus(
                     uid = uid,
                     approved = true,
                     active = true
                 )
-
                 fetchAdminData()
-
             } catch (e: Exception) {
-
-                errorMessage =
-                    e.localizedMessage
-                        ?: "Unable to approve user"
+                errorMessage = e.localizedMessage ?: "Unable to approve user"
             }
         }
     }
 
-
-    // =========================================================
-    // APPROVE EXPENSE
-    // =========================================================
-
-    fun approveExpense(
-        id: String,
-        status: String
-    ) {
-
+    fun approveExpense(id: String, status: String) {
         viewModelScope.launch {
-
             try {
-
-                expenseRepository
-                    .updateExpenseStatus(
-                        id,
-                        status
-                    )
-
+                expenseRepository.updateExpenseStatus(id, status)
                 fetchAdminData()
-
             } catch (e: Exception) {
-
-                errorMessage =
-                    e.localizedMessage
-                        ?: "Unable to update expense"
+                errorMessage = e.localizedMessage ?: "Unable to update expense"
             }
         }
     }
 
-
-    // =========================================================
-    // COMPANY PROFILE
-    // =========================================================
-
-    fun updateCompanyProfile(
-        profile: CompanyProfile
-    ) {
-
+    fun updateCompanyProfile(profile: CompanyProfile) {
         viewModelScope.launch {
-
             try {
-
-                billingRepository
-                    .updateCompanyProfile(
-                        profile
-                    )
-
+                billingRepository.updateCompanyProfile(profile)
             } catch (e: Exception) {
-
-                errorMessage =
-                    e.localizedMessage
-                        ?: "Unable to update company profile"
+                errorMessage = e.localizedMessage ?: "Unable to update company profile"
             }
         }
     }
 
-
-    // =========================================================
-    // BANK DETAILS
-    // =========================================================
-
-    fun updateBankDetails(
-        details: BankDetails
-    ) {
-
+    fun updateBankDetails(details: BankDetails) {
         viewModelScope.launch {
-
             try {
-
-                billingRepository
-                    .updateBankDetails(
-                        details
-                    )
-
+                billingRepository.updateBankDetails(details)
             } catch (e: Exception) {
-
-                errorMessage =
-                    e.localizedMessage
-                        ?: "Unable to update bank details"
+                errorMessage = e.localizedMessage ?: "Unable to update bank details"
             }
         }
     }
 
-
-    // =========================================================
-    // TERMS
-    // =========================================================
-
-    fun saveTerm(
-        term: TermConditionEntity
-    ) {
-
+    fun saveTerm(term: TermConditionEntity) {
         viewModelScope.launch {
-
             try {
-
-                billingRepository
-                    .saveTerm(term)
-
+                billingRepository.saveTerm(term)
             } catch (e: Exception) {
-
-                errorMessage =
-                    e.localizedMessage
-                        ?: "Unable to save term"
+                errorMessage = e.localizedMessage ?: "Unable to save term"
             }
         }
     }
 
-
-    fun deleteTerm(
-        term: TermConditionEntity
-    ) {
-
+    fun deleteTerm(term: TermConditionEntity) {
         viewModelScope.launch {
-
             try {
-
-                billingRepository
-                    .deleteTerm(term)
-
+                billingRepository.deleteTerm(term)
             } catch (e: Exception) {
-
-                errorMessage =
-                    e.localizedMessage
-                        ?: "Unable to delete term"
+                errorMessage = e.localizedMessage ?: "Unable to delete term"
             }
         }
     }
-
-
-    // =========================================================
-    // CLEAR ERROR
-    // =========================================================
 
     fun clearError() {
         errorMessage = null
