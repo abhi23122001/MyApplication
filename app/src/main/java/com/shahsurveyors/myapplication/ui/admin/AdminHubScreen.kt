@@ -35,428 +35,118 @@ fun AdminHubScreen(
     onNavigateToBankDetails: () -> Unit = {},
     onNavigateToTerms: () -> Unit = {}
 ) {
+    var showCreateUserDialog by remember { mutableStateOf(false) }
+    var selectedTab by remember { mutableIntStateOf(0) }
 
-    var showCreateUserDialog by remember {
-        mutableStateOf(false)
-    }
-
-    var selectedTab by remember {
-        mutableIntStateOf(0)
-    }
-
-    LaunchedEffect(Unit) {
-        viewModel.fetchAdminData()
-    }
+    LaunchedEffect(Unit) { viewModel.fetchAdminData() }
 
     Scaffold(
-
         topBar = {
-
             TopAppBar(
-
-                title = {
-                    Text(
-                        text = "Admin Hub",
-                        fontWeight = FontWeight.Bold,
-                        color = ShahWhite
-                    )
-                },
-
+                title = { Text("Admin Hub", fontWeight = FontWeight.Bold, color = ShahWhite) },
                 navigationIcon = {
-
-                    IconButton(
-                        onClick = onBack
-                    ) {
-
-                        Icon(
-                            imageVector =
-                                Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = ShahWhite
-                        )
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = ShahWhite)
                     }
                 },
-
-                colors =
-                    TopAppBarDefaults.topAppBarColors(
-                        containerColor = ShahDarkGreen
-                    )
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = ShahDarkGreen)
             )
         },
-
         floatingActionButton = {
-
             if (selectedTab == 0) {
-
                 ExtendedFloatingActionButton(
-
-                    onClick = {
-                        showCreateUserDialog = true
-                    },
-
-                    icon = {
-                        Icon(
-                            imageVector =
-                                Icons.Default.PersonAdd,
-                            contentDescription = null
-                        )
-                    },
-
-                    text = {
-                        Text("Add Employee")
-                    },
-
+                    onClick = { showCreateUserDialog = true },
+                    icon = { Icon(Icons.Default.PersonAdd, null) },
+                    text = { Text("Add Employee") },
                     containerColor = ShahGreen,
                     contentColor = ShahWhite
                 )
             }
         }
-
     ) { paddingValues ->
-
         Column(
-
-            modifier =
-                Modifier
-                    .padding(paddingValues)
-                    .fillMaxSize()
-                    .background(ShahGrey)
+            modifier = Modifier.padding(paddingValues).fillMaxSize().background(ShahGrey)
         ) {
-
             ScrollableTabRow(
-
-                selectedTabIndex =
-                    selectedTab,
-
-                containerColor =
-                    ShahWhite,
-
-                contentColor =
-                    ShahGreen,
-
-                edgePadding =
-                    16.dp,
-
+                selectedTabIndex = selectedTab,
+                containerColor = ShahWhite,
+                contentColor = ShahGreen,
+                edgePadding = 16.dp,
                 indicator = { tabPositions ->
-
-                    if (
-                        selectedTab <
-                        tabPositions.size
-                    ) {
-
+                    if (selectedTab < tabPositions.size) {
                         TabRowDefaults.SecondaryIndicator(
-
-                            modifier =
-                                Modifier.tabIndicatorOffset(
-                                    tabPositions[selectedTab]
-                                ),
-
-                            color =
-                                ShahGreen
+                            modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
+                            color = ShahGreen
                         )
                     }
                 }
-
             ) {
-
+                Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }, text = { Text("Logins", fontWeight = FontWeight.Bold) })
+                Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, text = { Text("Expenses", fontWeight = FontWeight.Bold) })
                 Tab(
-                    selected =
-                        selectedTab == 0,
-
-                    onClick = {
-                        selectedTab = 0
-                    },
-
-                    text = {
-                        Text(
-                            "Logins",
-                            fontWeight =
-                                FontWeight.Bold
-                        )
-                    }
+                    selected = selectedTab == 2,
+                    onClick = { selectedTab = 2; viewModel.refreshAttendance() },
+                    text = { Text("Attendance", fontWeight = FontWeight.Bold) }
                 )
-
-                Tab(
-                    selected =
-                        selectedTab == 1,
-
-                    onClick = {
-                        selectedTab = 1
-                    },
-
-                    text = {
-                        Text(
-                            "Expenses",
-                            fontWeight =
-                                FontWeight.Bold
-                        )
-                    }
-                )
-
-                Tab(
-                    selected =
-                        selectedTab == 2,
-
-                    onClick = {
-
-                        selectedTab = 2
-
-                        viewModel.refreshAttendance()
-                    },
-
-                    text = {
-                        Text(
-                            "Attendance",
-                            fontWeight =
-                                FontWeight.Bold
-                        )
-                    }
-                )
-
-                Tab(
-                    selected =
-                        selectedTab == 3,
-
-                    onClick = {
-                        selectedTab = 3
-                    },
-
-                    text = {
-                        Text(
-                            "Settings",
-                            fontWeight =
-                                FontWeight.Bold
-                        )
-                    }
-                )
+                Tab(selected = selectedTab == 3, onClick = { selectedTab = 3 }, text = { Text("Settings", fontWeight = FontWeight.Bold) })
             }
 
             when (selectedTab) {
-
-                0 ->
-                    PendingLoginsList(
-                        viewModel
-                    )
-
-                1 ->
-                    PendingExpensesList(
-                        viewModel
-                    )
-
-                2 ->
-                    AdminAttendanceList(
-                        viewModel
-                    )
-
-                3 ->
-                    AdminSettingsList(
-
-                        onNavigateToCompanySettings =
-                            onNavigateToCompanySettings,
-
-                        onNavigateToBankDetails =
-                            onNavigateToBankDetails,
-
-                        onNavigateToTerms =
-                            onNavigateToTerms
-                    )
+                0 -> PendingLoginsList(viewModel)
+                1 -> PendingExpensesList(viewModel)
+                2 -> AdminAttendanceList(viewModel)
+                3 -> AdminSettingsList(
+                    onNavigateToCompanySettings = onNavigateToCompanySettings,
+                    onNavigateToBankDetails = onNavigateToBankDetails,
+                    onNavigateToTerms = onNavigateToTerms
+                )
             }
         }
     }
 
     if (showCreateUserDialog) {
-
         AlertDialog(
-
-            onDismissRequest = {
-                showCreateUserDialog = false
-            },
-
-            title = {
-                Text("Add Employee")
-            },
-
-            text = {
-                Text(
-                    "Employee creation can be connected here."
-                )
-            },
-
+            onDismissRequest = { showCreateUserDialog = false },
+            title = { Text("Add Employee") },
+            text = { Text("Employee creation can be connected here.") },
             confirmButton = {
-
-                TextButton(
-                    onClick = {
-                        showCreateUserDialog = false
-                    }
-                ) {
-                    Text("OK")
-                }
+                TextButton(onClick = { showCreateUserDialog = false }) { Text("OK") }
             }
         )
     }
 
-    GlobalAsyncLoader(
-        isLoading =
-            viewModel.isLoading
-    )
+    GlobalAsyncLoader(isLoading = viewModel.isLoading)
 }
 
-
-// =========================================================
-// PENDING LOGINS
-// =========================================================
-
 @Composable
-fun PendingLoginsList(
-    viewModel: AdminViewModel
-) {
-
-    if (
-        viewModel.pendingUsers.isEmpty() &&
-        !viewModel.isLoading
-    ) {
-
-        Box(
-            modifier =
-                Modifier.fillMaxSize(),
-            contentAlignment =
-                Alignment.Center
-        ) {
-
-            Text(
-                text =
-                    "No pending login requests",
-                color =
-                    ShahMediumGrey
-            )
+fun PendingLoginsList(viewModel: AdminViewModel) {
+    if (viewModel.pendingUsers.isEmpty() && !viewModel.isLoading) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("No pending login requests", color = ShahMediumGrey)
         }
-
         return
     }
 
-    LazyColumn(
-
-        modifier =
-            Modifier.fillMaxSize(),
-
-        contentPadding =
-            PaddingValues(16.dp)
-    ) {
-
-        items(
-            items =
-                viewModel.pendingUsers,
-            key = {
-                it.uid
-            }
-        ) { user ->
-
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp)) {
+        items(viewModel.pendingUsers, key = { it.uid }) { user ->
             Card(
-
-                modifier =
-                    Modifier
-                        .padding(vertical = 8.dp)
-                        .fillMaxWidth(),
-
-                shape =
-                    RoundedCornerShape(12.dp),
-
-                colors =
-                    CardDefaults.cardColors(
-                        containerColor =
-                            ShahWhite
-                    ),
-
-                elevation =
-                    CardDefaults.cardElevation(
-                        defaultElevation =
-                            2.dp
-                    )
+                Modifier.padding(vertical = 8.dp).fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = ShahWhite),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
             ) {
-
-                Column(
-                    modifier =
-                        Modifier.padding(16.dp)
-                ) {
-
-                    Row(
-                        verticalAlignment =
-                            Alignment.CenterVertically
-                    ) {
-
-                        Column(
-                            modifier =
-                                Modifier.weight(1f)
-                        ) {
-
-                            Text(
-                                text =
-                                    user.name,
-                                color =
-                                    ShahBlack,
-                                fontWeight =
-                                    FontWeight.Bold,
-                                fontSize =
-                                    18.sp
-                            )
-
-                            Text(
-                                text =
-                                    user.email,
-                                color =
-                                    ShahMediumGrey,
-                                fontSize =
-                                    12.sp
-                            )
-
-                            Text(
-                                text =
-                                    "Dept: ${user.department}",
-                                color =
-                                    ShahGreen,
-                                fontSize =
-                                    11.sp,
-                                fontWeight =
-                                    FontWeight.Bold
-                            )
+                Column(Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(user.name, color = ShahBlack, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                            Text(user.email, color = ShahMediumGrey, fontSize = 12.sp)
+                            Text("Dept: ${user.department}", color = ShahGreen, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
-
-                        IconButton(
-                            onClick = {
-                                // Reject can be added later
-                            }
-                        ) {
-
-                            Icon(
-                                imageVector =
-                                    Icons.Default.Close,
-                                contentDescription =
-                                    "Reject",
-                                tint =
-                                    ErrorRed
-                            )
+                        IconButton(onClick = {}) {
+                            Icon(Icons.Default.Close, "Reject", tint = ErrorRed)
                         }
-
-                        IconButton(
-
-                            onClick = {
-
-                                viewModel.approveUser(
-                                    user.uid,
-                                    user.access
-                                )
-                            }
-
-                        ) {
-
-                            Icon(
-                                imageVector =
-                                    Icons.Default.Check,
-                                contentDescription =
-                                    "Approve",
-                                tint =
-                                    SuccessGreen
-                            )
+                        IconButton(onClick = { viewModel.approveUser(user.uid, user.access) }) {
+                            Icon(Icons.Default.Check, "Approve", tint = SuccessGreen)
                         }
                     }
                 }
@@ -465,172 +155,35 @@ fun PendingLoginsList(
     }
 }
 
-
-// =========================================================
-// PENDING EXPENSES
-// =========================================================
-
 @Composable
-fun PendingExpensesList(
-    viewModel: AdminViewModel
-) {
-
-    if (
-        viewModel.pendingExpenses.isEmpty() &&
-        !viewModel.isLoading
-    ) {
-
-        Box(
-            modifier =
-                Modifier.fillMaxSize(),
-            contentAlignment =
-                Alignment.Center
-        ) {
-
-            Text(
-                text =
-                    "No pending expense claims",
-                color =
-                    ShahMediumGrey
-            )
+fun PendingExpensesList(viewModel: AdminViewModel) {
+    if (viewModel.pendingExpenses.isEmpty() && !viewModel.isLoading) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("No pending expense claims", color = ShahMediumGrey)
         }
-
         return
     }
 
-    LazyColumn(
-
-        modifier =
-            Modifier.fillMaxSize(),
-
-        contentPadding =
-            PaddingValues(16.dp)
-    ) {
-
-        items(
-            viewModel.pendingExpenses
-        ) { expense ->
-
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp)) {
+        items(viewModel.pendingExpenses) { expense ->
             Card(
-
-                modifier =
-                    Modifier
-                        .padding(vertical = 8.dp)
-                        .fillMaxWidth(),
-
-                shape =
-                    RoundedCornerShape(12.dp),
-
-                colors =
-                    CardDefaults.cardColors(
-                        containerColor =
-                            ShahWhite
-                    ),
-
-                elevation =
-                    CardDefaults.cardElevation(
-                        defaultElevation =
-                            2.dp
-                    )
+                Modifier.padding(vertical = 8.dp).fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = ShahWhite),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
             ) {
-
-                Row(
-
-                    modifier =
-                        Modifier.padding(16.dp),
-
-                    verticalAlignment =
-                        Alignment.CenterVertically
-                ) {
-
-                    Column(
-                        modifier =
-                            Modifier.weight(1f)
-                    ) {
-
-                        Text(
-                            text =
-                                expense.userName,
-                            fontWeight =
-                                FontWeight.Bold,
-                            color =
-                                ShahBlack
-                        )
-
-                        Text(
-                            text =
-                                expense.category,
-                            color =
-                                ShahGreen,
-                            fontSize =
-                                12.sp,
-                            fontWeight =
-                                FontWeight.Bold
-                        )
-
-                        Text(
-                            text =
-                                expense.description,
-                            color =
-                                ShahMediumGrey,
-                            fontSize =
-                                11.sp
-                        )
-
-                        Text(
-                            text =
-                                "₹ ${expense.amount}",
-                            color =
-                                ShahBlack,
-                            fontWeight =
-                                FontWeight.ExtraBold,
-                            fontSize =
-                                16.sp
-                        )
+                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(expense.userName, fontWeight = FontWeight.Bold, color = ShahBlack)
+                        Text(expense.category, color = ShahGreen, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text(expense.description, color = ShahMediumGrey, fontSize = 11.sp)
+                        Text("₹ ${expense.amount}", color = ShahBlack, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
                     }
-
-                    IconButton(
-
-                        onClick = {
-
-                            viewModel.approveExpense(
-                                expense.id,
-                                "REJECTED"
-                            )
-                        }
-
-                    ) {
-
-                        Icon(
-                            imageVector =
-                                Icons.Default.Cancel,
-                            contentDescription =
-                                "Reject",
-                            tint =
-                                ErrorRed
-                        )
+                    IconButton(onClick = { viewModel.approveExpense(expense.id, "REJECTED") }) {
+                        Icon(Icons.Default.Cancel, "Reject", tint = ErrorRed)
                     }
-
-                    IconButton(
-
-                        onClick = {
-
-                            viewModel.approveExpense(
-                                expense.id,
-                                "APPROVED"
-                            )
-                        }
-
-                    ) {
-
-                        Icon(
-                            imageVector =
-                                Icons.Default.CheckCircle,
-                            contentDescription =
-                                "Approve",
-                            tint =
-                                SuccessGreen
-                        )
+                    IconButton(onClick = { viewModel.approveExpense(expense.id, "APPROVED") }) {
+                        Icon(Icons.Default.CheckCircle, "Approve", tint = SuccessGreen)
                     }
                 }
             }
@@ -638,607 +191,145 @@ fun PendingExpensesList(
     }
 }
 
-
-// =========================================================
-// ADMIN ATTENDANCE
-// =========================================================
-
 @Composable
-fun AdminAttendanceList(
-    viewModel: AdminViewModel
-) {
+fun AdminAttendanceList(viewModel: AdminViewModel) {
+    val attendanceCount = viewModel.attendanceSummary.size
+    val activeEmployeeCount = viewModel.allEmployees.count { it.active }
 
-    Column(
-        modifier =
-            Modifier.fillMaxSize()
-    ) {
+    // Attendance is the source of truth for people who actually punched today.
+    // If the employee profile list is temporarily incomplete, don't show Total=0
+    // while a real attendance record exists.
+    val totalCount = maxOf(activeEmployeeCount, attendanceCount)
+    val absentCount = (totalCount - attendanceCount).coerceAtLeast(0)
 
-        // -----------------------------------------------------
-        // HEADER STATS
-        // -----------------------------------------------------
-
+    Column(Modifier.fillMaxSize()) {
         Row(
-
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(
-                        horizontal = 16.dp,
-                        vertical = 12.dp
-                    ),
-
-            horizontalArrangement =
-                Arrangement.spacedBy(8.dp)
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-
-            StatItem(
-                label =
-                    "Present",
-                value =
-                    viewModel.attendanceSummary.size.toString(),
-                color =
-                    SuccessGreen,
-                modifier =
-                    Modifier.weight(1f)
-            )
-
-            StatItem(
-                label =
-                    "Absent",
-                value =
-                    (
-                            viewModel.allEmployees.count { it.active } -
-                                    viewModel.attendanceSummary.size
-                            ).coerceAtLeast(0).toString(),
-                color =
-                    ErrorRed,
-                modifier =
-                    Modifier.weight(1f)
-            )
-
-            StatItem(
-                label =
-                    "Total",
-                value =
-                    viewModel.allEmployees
-                        .count {
-                            it.active
-                        }
-                        .toString(),
-                color =
-                    ShahGreen,
-                modifier =
-                    Modifier.weight(1f)
-            )
+            StatItem("Present", attendanceCount.toString(), SuccessGreen, Modifier.weight(1f))
+            StatItem("Absent", absentCount.toString(), ErrorRed, Modifier.weight(1f))
+            StatItem("Total", totalCount.toString(), ShahGreen, Modifier.weight(1f))
         }
 
-        // -----------------------------------------------------
-        // REFRESH
-        // -----------------------------------------------------
-
         Row(
-
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(
-                        horizontal = 16.dp,
-                        vertical = 4.dp
-                    ),
-
-            horizontalArrangement =
-                Arrangement.End
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.End
         ) {
-
-            OutlinedButton(
-
-                onClick = {
-                    viewModel.fetchAdminData()
-                }
-
-            ) {
-
-                Icon(
-                    imageVector =
-                        Icons.Default.Refresh,
-                    contentDescription =
-                        "Refresh"
-                )
-
-                Spacer(
-                    modifier =
-                        Modifier.width(6.dp)
-                )
-
+            OutlinedButton(onClick = { viewModel.fetchAdminData() }) {
+                Icon(Icons.Default.Refresh, "Refresh")
+                Spacer(Modifier.width(6.dp))
                 Text("Refresh")
             }
         }
 
-        HorizontalDivider(
-            color =
-                ShahLightGrey
-        )
+        HorizontalDivider(color = ShahLightGrey)
 
-        // -----------------------------------------------------
-        // ATTENDANCE LIST
-        // -----------------------------------------------------
-
-        if (
-            viewModel.attendanceSummary.isEmpty() &&
-            !viewModel.isLoading
-        ) {
-
-            Box(
-                modifier =
-                    Modifier.fillMaxSize(),
-                contentAlignment =
-                    Alignment.Center
-            ) {
-
-                Column(
-                    horizontalAlignment =
-                        Alignment.CenterHorizontally
-                ) {
-
-                    Icon(
-                        imageVector =
-                            Icons.Default.EventBusy,
-                        contentDescription =
-                            null,
-                        tint =
-                            ShahMediumGrey,
-                        modifier =
-                            Modifier.size(48.dp)
-                    )
-
-                    Spacer(
-                        modifier =
-                            Modifier.height(12.dp)
-                    )
-
-                    Text(
-                        text =
-                            "No attendance records today",
-                        color =
-                            ShahMediumGrey,
-                        fontSize =
-                            14.sp
-                    )
+        if (viewModel.attendanceSummary.isEmpty() && !viewModel.isLoading) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Default.EventBusy, null, tint = ShahMediumGrey, modifier = Modifier.size(48.dp))
+                    Spacer(Modifier.height(12.dp))
+                    Text("No attendance records today", color = ShahMediumGrey, fontSize = 14.sp)
                 }
             }
-
             return@Column
         }
 
         LazyColumn(
-
-            modifier =
-                Modifier.fillMaxSize(),
-
-            contentPadding =
-                PaddingValues(16.dp),
-
-            verticalArrangement =
-                Arrangement.spacedBy(12.dp)
+            Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-
-            items(
-                items =
-                    viewModel.attendanceSummary,
-                key = {
-                    it.id
-                }
-            ) { attendance ->
-
-                AttendanceCard(
-                    attendance =
-                        attendance
-                )
+            items(viewModel.attendanceSummary, key = { it.id }) { attendance ->
+                AttendanceCard(attendance)
             }
         }
     }
 }
 
-
-// =========================================================
-// ATTENDANCE CARD
-// =========================================================
-
 @Composable
-fun AttendanceCard(
-    attendance: AttendanceRecord
-) {
-
+fun AttendanceCard(attendance: AttendanceRecord) {
     Card(
-
-        modifier =
-            Modifier.fillMaxWidth(),
-
-        shape =
-            RoundedCornerShape(14.dp),
-
-        colors =
-            CardDefaults.cardColors(
-                containerColor =
-                    ShahWhite
-            ),
-
-        elevation =
-            CardDefaults.cardElevation(
-                defaultElevation =
-                    2.dp
-            )
+        Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = ShahWhite),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-
-        Column(
-            modifier =
-                Modifier.padding(16.dp)
-        ) {
-
-            // -------------------------------------------------
-            // EMPLOYEE + STATUS
-            // -------------------------------------------------
-
-            Row(
-                verticalAlignment =
-                    Alignment.CenterVertically
-            ) {
-
-                Column(
-                    modifier =
-                        Modifier.weight(1f)
-                ) {
-
-                    Text(
-                        text =
-                            attendance.userName,
-                        fontSize =
-                            18.sp,
-                        fontWeight =
-                            FontWeight.Bold,
-                        color =
-                            ShahBlack
-                    )
-
-                    Text(
-                        text =
-                            attendance.siteName,
-                        fontSize =
-                            12.sp,
-                        color =
-                            ShahGreen,
-                        fontWeight =
-                            FontWeight.Bold
-                    )
+        Column(Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(attendance.userName, color = ShahBlack, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    Text(attendance.siteName, color = ShahGreen, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
-
                 Surface(
-
-                    color =
-                        if (
-                            attendance.punchOutTime != null
-                        ) {
-                            ShahLightGrey
-                        } else {
-                            SuccessGreen.copy(
-                                alpha = 0.15f
-                            )
-                        },
-
-                    shape =
-                        RoundedCornerShape(20.dp)
+                    shape = RoundedCornerShape(50),
+                    color = if (attendance.punchOutTime == null) SuccessGreen.copy(alpha = 0.12f) else ShahLightGrey
                 ) {
-
                     Text(
-
-                        text =
-                            if (
-                                attendance.punchOutTime != null
-                            ) {
-                                "COMPLETED"
-                            } else {
-                                "PUNCHED IN"
-                            },
-
-                        modifier =
-                            Modifier.padding(
-                                horizontal = 12.dp,
-                                vertical = 6.dp
-                            ),
-
-                        fontSize =
-                            10.sp,
-
-                        fontWeight =
-                            FontWeight.Bold,
-
-                        color =
-                            if (
-                                attendance.punchOutTime != null
-                            ) {
-                                ShahMediumGrey
-                            } else {
-                                SuccessGreen
-                            }
+                        if (attendance.punchOutTime == null) "PUNCHED IN" else "COMPLETED",
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        color = if (attendance.punchOutTime == null) SuccessGreen else ShahBlack,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }
 
-            Spacer(
-                modifier =
-                    Modifier.height(12.dp)
-            )
+            HorizontalDivider(Modifier.padding(vertical = 10.dp), color = ShahLightGrey)
 
-            HorizontalDivider(
-                color =
-                    ShahLightGrey
-            )
-
-            Spacer(
-                modifier =
-                    Modifier.height(12.dp)
-            )
-
-            // -------------------------------------------------
-            // PUNCH TIMES
-            // -------------------------------------------------
-
-            Row(
-                modifier =
-                    Modifier.fillMaxWidth(),
-
-                horizontalArrangement =
-                    Arrangement.spacedBy(8.dp)
-            ) {
-
-                AttendanceTimeItem(
-                    title =
-                        "Punch In",
-                    value =
-                        formatAttendanceTime(
-                            attendance.punchInTime
-                        ),
-                    modifier =
-                        Modifier.weight(1f)
-                )
-
-                AttendanceTimeItem(
-                    title =
-                        "Punch Out",
-                    value =
-                        formatAttendanceTime(
-                            attendance.punchOutTime
-                        ),
-                    modifier =
-                        Modifier.weight(1f)
-                )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                TimeBox("Punch In", formatAttendanceTime(attendance.punchInTime), Modifier.weight(1f))
+                TimeBox("Punch Out", formatAttendanceTime(attendance.punchOutTime), Modifier.weight(1f))
             }
 
-            Spacer(
-                modifier =
-                    Modifier.height(12.dp)
-            )
+            Spacer(Modifier.height(10.dp))
+            Text("📍 Punch In GPS", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = ShahBlack)
+            Text("${attendance.punchInLat}, ${attendance.punchInLng}", fontSize = 10.sp, color = ShahMediumGrey)
 
-            // -------------------------------------------------
-            // GPS
-            // -------------------------------------------------
-
-            Text(
-                text =
-                    "📍 Punch In GPS",
-                fontWeight =
-                    FontWeight.Bold,
-                fontSize =
-                    12.sp,
-                color =
-                    ShahBlack
-            )
-
-            Text(
-                text =
-                    "${attendance.punchInLat}, ${attendance.punchInLng}",
-                fontSize =
-                    11.sp,
-                color =
-                    ShahMediumGrey
-            )
-
-            Spacer(
-                modifier =
-                    Modifier.height(8.dp)
-            )
-
-            if (
-                attendance.punchOutTime != null
-            ) {
-
-                Text(
-                    text =
-                        "📍 Punch Out GPS",
-                    fontWeight =
-                        FontWeight.Bold,
-                    fontSize =
-                        12.sp,
-                    color =
-                        ShahBlack
-                )
-
-                Text(
-                    text =
-                        "${attendance.punchOutLat ?: "--"}, ${attendance.punchOutLng ?: "--"}",
-                    fontSize =
-                        11.sp,
-                    color =
-                        ShahMediumGrey
-                )
+            attendance.punchOutLat?.let { lat ->
+                attendance.punchOutLng?.let { lng ->
+                    Spacer(Modifier.height(6.dp))
+                    Text("📍 Punch Out GPS", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = ShahBlack)
+                    Text("$lat, $lng", fontSize = 10.sp, color = ShahMediumGrey)
+                }
             }
 
-            // -------------------------------------------------
-            // SELFIE URL
-            // -------------------------------------------------
-
-            if (
-                !attendance.selfieUrl.isNullOrBlank()
-            ) {
-
-                Spacer(
-                    modifier =
-                        Modifier.height(10.dp)
-                )
-
-                Text(
-                    text =
-                        "📷 Selfie uploaded",
-                    fontSize =
-                        12.sp,
-                    color =
-                        SuccessGreen,
-                    fontWeight =
-                        FontWeight.Bold
-                )
+            if (attendance.selfieUrl.isNotBlank()) {
+                Spacer(Modifier.height(8.dp))
+                Text("📷 Selfie uploaded", fontSize = 11.sp, color = SuccessGreen, fontWeight = FontWeight.Bold)
             }
         }
     }
 }
-
-
-// =========================================================
-// TIME ITEM
-// =========================================================
 
 @Composable
-fun AttendanceTimeItem(
-    title: String,
-    value: String,
-    modifier: Modifier = Modifier
-) {
-
-    Surface(
-
-        modifier =
-            modifier,
-
-        color =
-            ShahGrey,
-
-        shape =
-            RoundedCornerShape(8.dp)
-    ) {
-
-        Column(
-            modifier =
-                Modifier.padding(10.dp)
-        ) {
-
-            Text(
-                text =
-                    title,
-                fontSize =
-                    10.sp,
-                color =
-                    ShahMediumGrey
-            )
-
-            Text(
-                text =
-                    value,
-                fontSize =
-                    14.sp,
-                fontWeight =
-                    FontWeight.Bold,
-                color =
-                    ShahBlack
-            )
+private fun TimeBox(label: String, value: String, modifier: Modifier = Modifier) {
+    Surface(modifier = modifier, shape = RoundedCornerShape(10.dp), color = ShahGrey) {
+        Column(Modifier.padding(10.dp)) {
+            Text(label, fontSize = 9.sp, color = ShahMediumGrey)
+            Spacer(Modifier.height(2.dp))
+            Text(value, fontSize = 12.sp, color = ShahBlack, fontWeight = FontWeight.Bold)
         }
     }
 }
 
-
-// =========================================================
-// FORMAT TIME
-// =========================================================
-
-private fun formatAttendanceTime(
-    timestamp: com.google.firebase.Timestamp?
-): String {
-
-    if (timestamp == null) {
-        return "--:--"
-    }
-
-    return SimpleDateFormat(
-        "hh:mm a",
-        Locale.ENGLISH
-    ).format(
-        timestamp.toDate()
-    )
+private fun formatAttendanceTime(timestamp: com.google.firebase.Timestamp?): String {
+    if (timestamp == null) return "--:--"
+    return SimpleDateFormat("hh:mm a", Locale.ENGLISH).apply {
+        timeZone = java.util.TimeZone.getTimeZone("GMT+05:30")
+    }.format(timestamp.toDate())
 }
-
-
-// =========================================================
-// STAT ITEM
-// =========================================================
 
 @Composable
-fun StatItem(
-    label: String,
-    value: String,
-    color: Color,
-    modifier: Modifier
-) {
-
-    Surface(
-
-        modifier =
-            modifier,
-
-        color =
-            color.copy(
-                alpha = 0.1f
-            ),
-
-        shape =
-            RoundedCornerShape(8.dp)
-    ) {
-
-        Column(
-
-            modifier =
-                Modifier.padding(8.dp),
-
-            horizontalAlignment =
-                Alignment.CenterHorizontally
-        ) {
-
-            Text(
-                text =
-                    label,
-                fontSize =
-                    10.sp,
-                color =
-                    color,
-                fontWeight =
-                    FontWeight.Bold
-            )
-
-            Text(
-                text =
-                    value,
-                fontSize =
-                    16.sp,
-                fontWeight =
-                    FontWeight.Bold,
-                color =
-                    ShahBlack
-            )
+fun StatItem(label: String, value: String, color: Color, modifier: Modifier = Modifier) {
+    Surface(modifier = modifier, shape = RoundedCornerShape(8.dp), color = color.copy(alpha = 0.12f)) {
+        Column(Modifier.padding(vertical = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(label, fontSize = 9.sp, color = color, fontWeight = FontWeight.Bold)
+            Text(value, fontSize = 14.sp, color = ShahBlack, fontWeight = FontWeight.Bold)
         }
     }
 }
-
-
-// =========================================================
-// SETTINGS
-// =========================================================
 
 @Composable
 fun AdminSettingsList(
@@ -1246,172 +337,25 @@ fun AdminSettingsList(
     onNavigateToBankDetails: () -> Unit,
     onNavigateToTerms: () -> Unit
 ) {
-
-    LazyColumn(
-
-        modifier =
-            Modifier.fillMaxSize(),
-
-        contentPadding =
-            PaddingValues(16.dp)
-    ) {
-
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp)) {
         item {
-
-            AdminSettingItem(
-                title =
-                    "Company Profile",
-                subtitle =
-                    "Logo, Address, Contact Info",
-                icon =
-                    Icons.Default.Business,
-                onClick =
-                    onNavigateToCompanySettings
-            )
-
-            AdminSettingItem(
-                title =
-                    "Bank Details",
-                subtitle =
-                    "Account No, IFSC, GSTIN",
-                icon =
-                    Icons.Default.AccountBalance,
-                onClick =
-                    onNavigateToBankDetails
-            )
-
-            AdminSettingItem(
-                title =
-                    "Terms & Conditions",
-                subtitle =
-                    "Reusable document terms",
-                icon =
-                    Icons.Default.Gavel,
-                onClick =
-                    onNavigateToTerms
-            )
-
-            AdminSettingItem(
-                title =
-                    "Document Numbering",
-                subtitle =
-                    "Prefixes and sequences",
-                icon =
-                    Icons.Default.Numbers,
-                onClick = {}
-            )
-
-            AdminSettingItem(
-                title =
-                    "Geo-Fence Settings",
-                subtitle =
-                    "Radius and allowed sites",
-                icon =
-                    Icons.Default.Map,
-                onClick = {}
-            )
+            SettingsItem("Company Settings", Icons.Default.Business, onNavigateToCompanySettings)
+            SettingsItem("Bank Details", Icons.Default.AccountBalance, onNavigateToBankDetails)
+            SettingsItem("Terms & Conditions", Icons.Default.Description, onNavigateToTerms)
         }
     }
 }
 
-
-// =========================================================
-// SETTINGS ITEM
-// =========================================================
-
 @Composable
-fun AdminSettingItem(
-    title: String,
-    subtitle: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    onClick: () -> Unit
-) {
-
+private fun SettingsItem(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
     Card(
-
-        modifier =
-            Modifier
-                .padding(vertical = 6.dp)
-                .fillMaxWidth()
-                .clickable {
-                    onClick()
-                },
-
-        shape =
-            RoundedCornerShape(12.dp),
-
-        colors =
-            CardDefaults.cardColors(
-                containerColor =
-                    ShahWhite
-            ),
-
-        elevation =
-            CardDefaults.cardElevation(
-                defaultElevation =
-                    1.dp
-            )
+        Modifier.fillMaxWidth().padding(vertical = 6.dp).clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = ShahWhite)
     ) {
-
-        Row(
-
-            modifier =
-                Modifier.padding(16.dp),
-
-            verticalAlignment =
-                Alignment.CenterVertically
-        ) {
-
-            Icon(
-                imageVector =
-                    icon,
-                contentDescription =
-                    null,
-                tint =
-                    ShahGreen,
-                modifier =
-                    Modifier.size(24.dp)
-            )
-
-            Spacer(
-                modifier =
-                    Modifier.width(16.dp)
-            )
-
-            Column(
-                modifier =
-                    Modifier.weight(1f)
-            ) {
-
-                Text(
-                    text =
-                        title,
-                    color =
-                        ShahBlack,
-                    fontWeight =
-                        FontWeight.Bold,
-                    fontSize =
-                        16.sp
-                )
-
-                Text(
-                    text =
-                        subtitle,
-                    color =
-                        ShahMediumGrey,
-                    fontSize =
-                        12.sp
-                )
-            }
-
-            Icon(
-                imageVector =
-                    Icons.Default.ChevronRight,
-                contentDescription =
-                    null,
-                tint =
-                    ShahLightGrey
-            )
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, null, tint = ShahGreen)
+            Spacer(Modifier.width(12.dp))
+            Text(title, color = ShahBlack, fontWeight = FontWeight.Bold)
         }
     }
 }
