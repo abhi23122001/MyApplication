@@ -87,13 +87,9 @@ class AdminViewModel(
                 val expenses = expenseRepository.getAllExpenses()
                 pendingExpenses = expenses.filter { it.status == "PENDING" }
 
-                // IMPORTANT:
-                // Attendance must be loaded directly from today's attendance
-                // collection. Previously we looped through getAllEmployees()
-                // and called getTodayAttendance(uid). That silently hides valid
-                // attendance records when the punched-in user's profile is not
-                // returned by the employee-role query (role/profile mismatch,
-                // stale employee list, etc.).
+                // Attendance is loaded directly from today's attendance
+                // collection so valid records are never hidden by a user-role
+                // mismatch in the employee query.
                 loadTodayAttendance()
 
             } catch (e: Exception) {
@@ -106,8 +102,10 @@ class AdminViewModel(
     }
 
     /**
-     * Loads today's attendance directly from Firestore.
-     * This is the authoritative source for the Admin Attendance screen.
+     * Firestore attendance is the source of truth for today's attendance.
+     * If a punched user is missing from the employee-role query, add a small
+     * synthetic active profile for statistics only. This keeps Admin totals
+     * truthful without changing the users collection.
      */
     private suspend fun loadTodayAttendance() {
         val attendanceList = try {
@@ -123,6 +121,24 @@ class AdminViewModel(
 
         attendanceSummary = sortedAttendance
         presentCount = sortedAttendance.size
+
+        val existingUids = allEmployees.map { it.uid }.toHashSet()
+        val missingAttendanceProfiles = sortedAttendance
+            .filter { it.uid.isNotBlank() && it.uid !in existingUids }
+            .map { record ->
+                UserProfile(
+                    uid = record.uid,
+                    name = record.userName,
+                    role = "employee",
+                    approved = true,
+                    active = true
+                )
+            }
+
+        if (missingAttendanceProfiles.isNotEmpty()) {
+            allEmployees = allEmployees + missingAttendanceProfiles
+        }
+
         absentCount = (allEmployees.count { it.active } - presentCount)
             .coerceAtLeast(0)
     }
