@@ -33,9 +33,17 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.google.firebase.Timestamp
+import com.shahsurveyors.myapplication.data.AttendanceCorrectionRepository
 import com.shahsurveyors.myapplication.data.AttendanceRepository
 import com.shahsurveyors.myapplication.data.StorageRepository
+import com.shahsurveyors.myapplication.models.AttendanceCorrectionRequest
 import com.shahsurveyors.myapplication.ui.theme.*
+import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 import java.util.concurrent.Executors
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -44,6 +52,8 @@ fun AttendanceScreen(uid: String, userName: String, modifier: Modifier = Modifie
     val context = LocalContext.current
     val attendanceRepository = remember { AttendanceRepository() }
     val storageRepository = remember { StorageRepository() }
+    val correctionRepository = remember { AttendanceCorrectionRepository() }
+    val scope = rememberCoroutineScope()
     val attendanceViewModel: AttendanceViewModel = viewModel(factory = object : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(AttendanceViewModel::class.java)) {
@@ -59,8 +69,16 @@ fun AttendanceScreen(uid: String, userName: String, modifier: Modifier = Modifie
     var locationPermission by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) }
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
     var cameraError by remember { mutableStateOf<String?>(null) }
+    var showCorrectionDialog by remember { mutableStateOf(false) }
+    var correctionSubmitting by remember { mutableStateOf(false) }
+    var correctionMessage by remember { mutableStateOf<String?>(null) }
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
     val scrollState = rememberScrollState()
+    val today = remember {
+        SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH).apply {
+            timeZone = TimeZone.getTimeZone("GMT+05:30")
+        }.format(Date())
+    }
 
     val cameraPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         cameraPermission = granted
@@ -191,6 +209,27 @@ fun AttendanceScreen(uid: String, userName: String, modifier: Modifier = Modifie
                 }
             }
 
+            correctionMessage?.let { message ->
+                Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
+                    Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.PendingActions, null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(message, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+
+            OutlinedButton(
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                enabled = uid.isNotBlank() && !correctionSubmitting,
+                shape = RoundedCornerShape(16.dp),
+                onClick = { showCorrectionDialog = true }
+            ) {
+                Icon(Icons.Default.EditCalendar, null)
+                Spacer(Modifier.width(8.dp))
+                Text("REQUEST ATTENDANCE CORRECTION")
+            }
+
             Button(
                 modifier = Modifier.fillMaxWidth().height(56.dp),
                 enabled = !attendanceViewModel.isLoading && cameraPermission && locationPermission && siteName.isNotBlank() && attendanceViewModel.currentStatus != "PUNCHED OUT",
@@ -213,5 +252,42 @@ fun AttendanceScreen(uid: String, userName: String, modifier: Modifier = Modifie
             }
             Spacer(Modifier.height(8.dp))
         }
+    }
+
+    if (showCorrectionDialog) {
+        AttendanceCorrectionDialog(
+            date = today,
+            isSubmitting = correctionSubmitting,
+            onDismiss = { showCorrectionDialog = false },
+            onSubmit = { issueType, reason ->
+                correctionSubmitting = true
+                scope.launch {
+                    try {
+                        if (correctionRepository.hasPendingRequest(uid, today, issueType)) {
+                            correctionMessage = "A correction request for this issue is already pending approval."
+                        } else {
+                            correctionRepository.createRequest(
+                                AttendanceCorrectionRequest(
+                                    uid = uid,
+                                    employeeName = userName,
+                                    attendanceDate = today,
+                                    issueType = issueType,
+                                    reason = reason,
+                                    status = "PENDING",
+                                    createdAt = Timestamp.now(),
+                                    updatedAt = Timestamp.now()
+                                )
+                            )
+                            correctionMessage = "Correction request submitted. Waiting for Admin approval."
+                            showCorrectionDialog = false
+                        }
+                    } catch (e: Exception) {
+                        correctionMessage = "Unable to submit correction: ${e.localizedMessage ?: "Please try again"}"
+                    } finally {
+                        correctionSubmitting = false
+                    }
+                }
+            }
+        )
     }
 }
