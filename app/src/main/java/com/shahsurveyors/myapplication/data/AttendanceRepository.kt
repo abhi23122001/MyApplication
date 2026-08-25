@@ -102,16 +102,90 @@ class AttendanceRepository(
         val docId =
             "${uid}_$today"
 
+        val document =
+            attendanceCollection
+                .document(docId)
+                .get()
+                .await()
+
+        val record =
+            document.toObject(
+                AttendanceRecord::class.java
+            )
+
+        val punchOutTimestamp =
+            com.google.firebase.Timestamp.now()
+
+        val workingMinutes =
+            if (record?.punchInTime != null) {
+                ((punchOutTimestamp.toDate().time - record.punchInTime.toDate().time) / 60_000L)
+                    .coerceAtLeast(0L)
+                    .toInt()
+            } else {
+                0
+            }
+
         attendanceCollection
             .document(docId)
             .update(
                 mapOf(
-                    "punchOutTime" to
-                            FieldValue.serverTimestamp(),
-
+                    "punchOutTime" to punchOutTimestamp,
                     "punchOutLat" to lat,
+                    "punchOutLng" to lng,
+                    "workingMinutes" to workingMinutes,
+                    "punchOutMissing" to false
+                )
+            )
+            .await()
+    }
 
-                    "punchOutLng" to lng
+    // =========================================================
+    // MARK A RECORD AS MISSING PUNCH OUT
+    // =========================================================
+
+    suspend fun markPunchOutMissing(
+        uid: String,
+        date: String
+    ) {
+        val docId = "${uid}_$date"
+
+        attendanceCollection
+            .document(docId)
+            .update(
+                mapOf(
+                    "punchOutMissing" to true,
+                    "status" to "MISSING_PUNCH_OUT"
+                )
+            )
+            .await()
+    }
+
+    // =========================================================
+    // UPDATE ATTENDANCE STATUS / PAYROLL METRICS
+    // =========================================================
+
+    suspend fun updateAttendanceClassification(
+        uid: String,
+        date: String,
+        status: String,
+        lateMinutes: Int = 0,
+        earlyOutMinutes: Int = 0,
+        overtimeMinutes: Int = 0,
+        leaveRequestId: String = ""
+    ) {
+        val docId = "${uid}_$date"
+
+        attendanceCollection
+            .document(docId)
+            .update(
+                mapOf(
+                    "status" to status,
+                    "lateMinutes" to lateMinutes.coerceAtLeast(0),
+                    "earlyOutMinutes" to earlyOutMinutes.coerceAtLeast(0),
+                    "overtimeMinutes" to overtimeMinutes.coerceAtLeast(0),
+                    "isLate" to (lateMinutes > 0),
+                    "isEarlyOut" to (earlyOutMinutes > 0),
+                    "leaveRequestId" to leaveRequestId
                 )
             )
             .await()
