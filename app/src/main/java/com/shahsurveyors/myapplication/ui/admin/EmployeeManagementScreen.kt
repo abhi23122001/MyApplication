@@ -1,5 +1,6 @@
 package com.shahsurveyors.myapplication.ui.admin
 
+import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -16,14 +17,19 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.google.firebase.FirebaseApp
+import com.google.firebase.auth.FirebaseAuth
 import com.shahsurveyors.myapplication.data.SalaryRepository
+import com.shahsurveyors.myapplication.data.UserRepository
 import com.shahsurveyors.myapplication.models.SalaryProfileModel
 import com.shahsurveyors.myapplication.models.UserProfile
 import com.shahsurveyors.myapplication.ui.theme.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -33,6 +39,9 @@ import java.util.Locale
 fun EmployeeManagementScreen(viewModel: AdminViewModel, onBack: () -> Unit = {}) {
     var searchQuery by remember { mutableStateOf("") }
     var salaryEmployee by remember { mutableStateOf<UserProfile?>(null) }
+    var menuEmployee by remember { mutableStateOf<UserProfile?>(null) }
+    var detailsEmployee by remember { mutableStateOf<UserProfile?>(null) }
+    var showAddEmployee by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { viewModel.fetchAdminData() }
     val filteredEmployees = remember(searchQuery, viewModel.allEmployees) {
@@ -51,7 +60,7 @@ fun EmployeeManagementScreen(viewModel: AdminViewModel, onBack: () -> Unit = {})
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = {}, containerColor = ShahGreen, contentColor = ShahWhite, shape = RoundedCornerShape(16.dp)) { Icon(Icons.Default.Add, "Add Employee") }
+            FloatingActionButton(onClick = { showAddEmployee = true }, containerColor = ShahGreen, contentColor = ShahWhite, shape = RoundedCornerShape(16.dp)) { Icon(Icons.Default.Add, "Add Employee") }
         },
         containerColor = ShahGrey
     ) { padding ->
@@ -69,27 +78,180 @@ fun EmployeeManagementScreen(viewModel: AdminViewModel, onBack: () -> Unit = {})
                 Box(Modifier.fillMaxSize().padding(30.dp), contentAlignment = Alignment.Center) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.PersonSearch, null, tint = ShahMediumGrey, modifier = Modifier.size(42.dp)); Spacer(Modifier.height(10.dp)); Text("No employees found", fontWeight = FontWeight.Bold); Text(if (searchQuery.isBlank()) "Employee records will appear here." else "Try another name, ID, department or role.", fontSize = 11.sp, color = ShahMediumGrey) } }
             } else {
                 LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    items(filteredEmployees, key = { it.uid }) { employee -> EmployeeCard(employee, onSalaryClick = { salaryEmployee = employee }) }
+                    items(filteredEmployees, key = { it.uid }) { employee ->
+                        EmployeeCard(
+                            employee = employee,
+                            onSalaryClick = { salaryEmployee = employee },
+                            onMenuClick = { menuEmployee = employee }
+                        )
+                    }
                 }
             }
         }
     }
 
-    salaryEmployee?.let { employee ->
-        SalarySettingsDialog(employee = employee, onDismiss = { salaryEmployee = null })
+    salaryEmployee?.let { employee -> SalarySettingsDialog(employee = employee, onDismiss = { salaryEmployee = null }) }
+
+    menuEmployee?.let { employee ->
+        EmployeeOptionsMenuDialog(
+            employee = employee,
+            onDismiss = { menuEmployee = null },
+            onDetails = { detailsEmployee = employee; menuEmployee = null },
+            onToggleActive = {
+                viewModel.setEmployeeActive(employee.uid, !employee.active)
+                menuEmployee = null
+            }
+        )
+    }
+
+    detailsEmployee?.let { employee -> EmployeeDetailsDialog(employee = employee, onDismiss = { detailsEmployee = null }) }
+
+    if (showAddEmployee) {
+        AddEmployeeDialog(
+            onDismiss = { showAddEmployee = false },
+            onCreated = {
+                showAddEmployee = false
+                viewModel.fetchAdminData()
+            }
+        )
     }
 }
 
 @Composable
-fun EmployeeCard(employee: UserProfile, onSalaryClick: () -> Unit = {}) {
+fun EmployeeCard(employee: UserProfile, onSalaryClick: () -> Unit = {}, onMenuClick: () -> Unit = {}) {
     Card(Modifier.fillMaxWidth(), RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = ShahWhite), elevation = CardDefaults.cardElevation(1.dp)) {
         Row(Modifier.padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
             Surface(Modifier.size(50.dp).clip(CircleShape), color = ShahGreen.copy(.10f)) { Box(contentAlignment = Alignment.Center) { Text(employee.name.trim().firstOrNull()?.uppercase() ?: "?", fontWeight = FontWeight.Bold, color = ShahGreen, fontSize = 20.sp) } }
             Spacer(Modifier.width(13.dp))
-            Column(Modifier.weight(1f)) { Text(employee.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(3.dp)); Text("ID: ${employee.uid.take(8)} • ${employee.role}", fontSize = 10.sp, color = ShahMediumGrey); Spacer(Modifier.height(4.dp)); Surface(shape = RoundedCornerShape(7.dp), color = ShahGreen.copy(.08f)) { Text(employee.department, color = ShahGreen, fontWeight = FontWeight.Bold, fontSize = 9.sp, modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)) } }
+            Column(Modifier.weight(1f)) { Text(employee.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(3.dp)); Text("ID: ${employee.uid.take(8)} • ${employee.role}", fontSize = 10.sp, color = ShahMediumGrey); Spacer(Modifier.height(4.dp)); Surface(shape = RoundedCornerShape(7.dp), color = if (employee.active) ShahGreen.copy(.08f) else ShahMediumGrey.copy(.12f)) { Text(if (employee.active) employee.department else "INACTIVE • ${employee.department}", color = if (employee.active) ShahGreen else ShahMediumGrey, fontWeight = FontWeight.Bold, fontSize = 9.sp, modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)) } }
             IconButton(onClick = onSalaryClick) { Icon(Icons.Default.Payments, "Salary settings", tint = ShahGreen) }
-            IconButton(onClick = {}) { Icon(Icons.Default.MoreVert, "Employee options", tint = ShahMediumGrey) }
+            IconButton(onClick = onMenuClick) { Icon(Icons.Default.MoreVert, "Employee options", tint = ShahMediumGrey) }
         }
+    }
+}
+
+@Composable
+private fun EmployeeOptionsMenuDialog(employee: UserProfile, onDismiss: () -> Unit, onDetails: () -> Unit, onToggleActive: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Employee Options", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(onClick = onDetails, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Info, null); Spacer(Modifier.width(8.dp)); Text("View employee details") }
+                TextButton(onClick = onToggleActive, modifier = Modifier.fillMaxWidth()) { Icon(if (employee.active) Icons.Default.PersonOff else Icons.Default.PersonAdd, null); Spacer(Modifier.width(8.dp)); Text(if (employee.active) "Deactivate employee" else "Activate employee") }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } }
+    )
+}
+
+@Composable
+private fun EmployeeDetailsDialog(employee: UserProfile, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(employee.name, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                DetailRow("Email", employee.email)
+                DetailRow("User ID", employee.uid)
+                DetailRow("Role", employee.role)
+                DetailRow("Department", employee.department)
+                DetailRow("Access", employee.access)
+                DetailRow("Approved", if (employee.approved) "Yes" else "No")
+                DetailRow("Active", if (employee.active) "Yes" else "No")
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } }
+    )
+}
+
+@Composable
+private fun DetailRow(label: String, value: String) {
+    Column {
+        Text(label, fontSize = 10.sp, color = ShahMediumGrey, fontWeight = FontWeight.Bold)
+        Text(value.ifBlank { "—" }, fontSize = 13.sp)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddEmployeeDialog(onDismiss: () -> Unit, onCreated: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val repository = remember { UserRepository() }
+
+    var name by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var department by remember { mutableStateOf("SURVEY") }
+    var loading by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = { if (!loading) onDismiss() },
+        title = { Text("Add Employee", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Create the employee login and Firestore profile from the admin account.", fontSize = 11.sp, color = ShahMediumGrey)
+                OutlinedTextField(name, { name = it }, label = { Text("Full name") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(email, { email = it.trim() }, label = { Text("Email") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(password, { password = it }, label = { Text("Temporary password") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(department, { department = it.uppercase() }, label = { Text("Department") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 11.sp) }
+            }
+        },
+        confirmButton = {
+            Button(
+                enabled = !loading && name.isNotBlank() && email.contains("@") && password.length >= 6 && department.isNotBlank(),
+                onClick = {
+                    scope.launch {
+                        loading = true
+                        error = null
+                        try {
+                            createEmployeeAccount(context, name.trim(), email.trim(), password, department.trim(), repository)
+                            onCreated()
+                        } catch (e: Exception) {
+                            error = e.localizedMessage ?: "Unable to create employee"
+                        } finally {
+                            loading = false
+                        }
+                    }
+                }
+            ) { Text(if (loading) "Creating..." else "Create Employee") }
+        },
+        dismissButton = { TextButton(enabled = !loading, onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+private suspend fun createEmployeeAccount(
+    context: Context,
+    name: String,
+    email: String,
+    password: String,
+    department: String,
+    repository: UserRepository
+) {
+    val appName = "employee_creator_${System.currentTimeMillis()}"
+    val secondaryApp = FirebaseApp.initializeApp(context, FirebaseApp.getInstance().options, appName)
+        ?: error("Unable to initialize Firebase for employee creation")
+    try {
+        val auth = FirebaseAuth.getInstance(secondaryApp)
+        val result = auth.createUserWithEmailAndPassword(email, password).await()
+        val uid = result.user?.uid ?: error("Firebase did not return an employee UID")
+        repository.saveUserProfile(
+            UserProfile(
+                uid = uid,
+                name = name,
+                email = email,
+                role = "employee",
+                department = department,
+                access = "ATTENDANCE,CHAT",
+                approved = true,
+                active = true
+            )
+        )
+    } finally {
+        secondaryApp.delete().await()
     }
 }
 
