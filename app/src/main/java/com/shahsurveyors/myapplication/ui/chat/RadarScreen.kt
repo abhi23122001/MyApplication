@@ -16,21 +16,13 @@ import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.shahsurveyors.myapplication.ui.theme.*
 
-data class StaffLocation(
-    val name: String,
-    val lat: Double,
-    val lon: Double,
-    val battery: Int,
-    val lastUpdate: String
-)
-
+data class StaffLocation(val name: String, val lat: Double, val lon: Double, val battery: Int, val lastUpdate: String)
 data class ChatMessage(val sender: String, val message: String, val time: String)
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -38,88 +30,48 @@ data class ChatMessage(val sender: String, val message: String, val time: String
 fun RadarScreen(onBack: () -> Unit = {}) {
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf("LIVE RADAR", "TEAM CHAT")
-
-    Scaffold(
-        topBar = {
-            Column {
-                TopAppBar(
-                    title = { Text("Team Sync", fontWeight = FontWeight.Bold, color = ShahWhite) },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = ShahWhite)
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = ShahDarkGreen)
-                )
-                TabRow(
-                    selectedTabIndex = selectedTab,
-                    containerColor = ShahWhite,
-                    contentColor = ShahGreen,
-                    indicator = { tabPositions ->
-                        TabRowDefaults.SecondaryIndicator(
-                            Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
-                            color = ShahGreen
-                        )
-                    }
-                ) {
-                    tabs.forEachIndexed { index, title ->
-                        Tab(
-                            selected = selectedTab == index, 
-                            onClick = { selectedTab = index }, 
-                            text = { Text(title, fontWeight = FontWeight.Bold) }
-                        )
-                    }
-                }
+    Scaffold(topBar = {
+        Column {
+            TopAppBar(
+                title = { Column { Text("Team Sync", fontWeight = FontWeight.Bold, color = ShahWhite); Text("Live team location & communication", fontSize = 10.sp, color = ShahWhite.copy(alpha = .72f)) } },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = ShahWhite) } },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = ShahDarkGreen)
+            )
+            TabRow(selectedTabIndex = selectedTab, containerColor = ShahWhite, contentColor = ShahGreen, indicator = { positions ->
+                TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(positions[selectedTab]), color = ShahGreen)
+            }) {
+                tabs.forEachIndexed { index, title -> Tab(selected = selectedTab == index, onClick = { selectedTab = index }, text = { Text(title, fontWeight = FontWeight.Bold, fontSize = 11.sp) }) }
             }
         }
-    ) { padding ->
-        Column(modifier = Modifier.padding(padding).fillMaxSize().background(ShahGrey)) {
-            if (selectedTab == 0) {
-                LiveRadarView()
-            } else {
-                TeamChatView()
-            }
-        }
+    }) { padding ->
+        Column(Modifier.padding(padding).fillMaxSize().background(ShahGrey)) { if (selectedTab == 0) LiveRadarView() else TeamChatView() }
     }
 }
 
 @Composable
 fun LiveRadarView() {
     val context = LocalContext.current
-    val staffList = remember {
-        listOf(
-            StaffLocation("Aditya (DGPS)", 24.123456, 82.654321, 85, "2 min ago"),
-            StaffLocation("Verma (TS)", 24.125000, 82.656000, 42, "Just now"),
-            StaffLocation("John (Site)", 24.121000, 82.651000, 98, "10 min ago")
-        )
-    }
-
-    LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+    val staffList = remember { listOf(StaffLocation("Aditya (DGPS)",24.123456,82.654321,85,"2 min ago"), StaffLocation("Verma (TS)",24.125,82.656,42,"Just now"), StaffLocation("John (Site)",24.121,82.651,98,"10 min ago")) }
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        item {
+            Surface(Modifier.fillMaxWidth(), RoundedCornerShape(18.dp), color = ShahGreen.copy(alpha = .07f)) {
+                Row(Modifier.padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Surface(shape = RoundedCornerShape(11.dp), color = ShahGreen.copy(alpha = .12f)) { Icon(Icons.Default.Radar, null, tint = ShahGreen, modifier = Modifier.padding(9.dp).size(23.dp)) }
+                    Spacer(Modifier.width(11.dp)); Column { Text("Team locations", fontWeight = FontWeight.Bold, color = ShahDarkGreen); Text("Tap a member to open their location", fontSize = 10.sp, color = ShahMediumGrey) }
+                }
+            }
+        }
         items(staffList) { staff ->
-            Card(
-                modifier = Modifier.padding(vertical = 4.dp).fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = ShahWhite),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-            ) {
-                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(staff.name, color = ShahBlack, fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.BatteryChargingFull, contentDescription = null, modifier = Modifier.size(12.dp), tint = SuccessGreen)
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("${staff.battery}% Battery", color = ShahMediumGrey, fontSize = 11.sp)
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text("Last sync: ${staff.lastUpdate}", color = ShahMediumGrey, fontSize = 11.sp)
-                        }
+            Card(Modifier.fillMaxWidth(), RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = ShahWhite), elevation = CardDefaults.cardElevation(1.dp)) {
+                Row(Modifier.padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Surface(shape = RoundedCornerShape(12.dp), color = if (staff.lastUpdate == "Just now") SuccessGreen.copy(alpha=.10f) else WarningAmber.copy(alpha=.10f)) {
+                        Icon(Icons.Default.PersonPinCircle, null, tint = if (staff.lastUpdate == "Just now") SuccessGreen else WarningAmber, modifier = Modifier.padding(10.dp).size(23.dp))
                     }
-                    IconButton(onClick = {
-                        val uri = "geo:${staff.lat},${staff.lon}?q=${staff.lat},${staff.lon}(${staff.name})"
-                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uri))
-                        context.startActivity(intent)
-                    }) {
-                        Icon(Icons.Default.Map, contentDescription = "Open in Maps", tint = ShahGreen)
+                    Spacer(Modifier.width(12.dp)); Column(Modifier.weight(1f)) {
+                        Text(staff.name, color = ShahBlack, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Spacer(Modifier.height(5.dp)); Row { Icon(Icons.Default.BatteryChargingFull,null,Modifier.size(14.dp), tint=SuccessGreen); Spacer(Modifier.width(3.dp)); Text("${staff.battery}%",fontSize=10.sp,color=ShahMediumGrey); Spacer(Modifier.width(10.dp)); Text(staff.lastUpdate,fontSize=10.sp,color=ShahMediumGrey) }
                     }
+                    FilledTonalIconButton(onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("geo:${staff.lat},${staff.lon}?q=${staff.lat},${staff.lon}(${staff.name})"))) }) { Icon(Icons.Default.Map, "Open in Maps", tint = ShahGreen) }
                 }
             }
         }
@@ -128,54 +80,18 @@ fun LiveRadarView() {
 
 @Composable
 fun TeamChatView() {
-    val messages = remember {
-        listOf(
-            ChatMessage("Admin", "All teams: Report to Site A by 09:00", "08:30 AM"),
-            ChatMessage("Aditya", "DGPS base setup complete at BM-01", "08:45 AM")
-        )
-    }
-
-    Column(modifier = Modifier.fillMaxSize()) {
-        LazyColumn(modifier = Modifier.weight(1f).padding(16.dp)) {
+    val messages = remember { listOf(ChatMessage("Admin","All teams: Report to Site A by 09:00","08:30 AM"),ChatMessage("Aditya","DGPS base setup complete at BM-01","08:45 AM")) }
+    Column(Modifier.fillMaxSize()) {
+        LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding=PaddingValues(16.dp), verticalArrangement=Arrangement.spacedBy(8.dp)) {
+            item { Surface(Modifier.fillMaxWidth(),RoundedCornerShape(16.dp),color=ShahWhite) { Row(Modifier.padding(14.dp),verticalAlignment=Alignment.CenterVertically) { Icon(Icons.Default.Groups,null,tint=ShahGreen); Spacer(Modifier.width(10.dp)); Column { Text("Team Chat",fontWeight=FontWeight.Bold); Text("Quick communication with your team",fontSize=10.sp,color=ShahMediumGrey) } } } }
             items(messages) { msg ->
                 val isMe = msg.sender == "Admin"
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                    horizontalAlignment = if (isMe) Alignment.End else Alignment.Start
-                ) {
-                    Surface(
-                        color = if (isMe) ShahGreen else ShahWhite,
-                        shape = RoundedCornerShape(12.dp),
-                        tonalElevation = 2.dp
-                    ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            Text(msg.sender, color = if (isMe) ShahWhite else ShahGreen, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                            Text(msg.message, color = if (isMe) ShahWhite else ShahBlack, fontSize = 14.sp)
-                            Text(msg.time, color = if (isMe) ShahWhite.copy(alpha = 0.7f) else ShahMediumGrey, fontSize = 9.sp, modifier = Modifier.align(Alignment.End))
-                        }
-                    }
+                Column(Modifier.fillMaxWidth(),horizontalAlignment=if(isMe) Alignment.End else Alignment.Start) {
+                    Surface(color=if(isMe) ShahGreen else ShahWhite,shape=RoundedCornerShape(16.dp),tonalElevation=1.dp) { Column(Modifier.padding(12.dp)) { Text(msg.sender,color=if(isMe) ShahWhite else ShahGreen,fontWeight=FontWeight.Bold,fontSize=11.sp); Spacer(Modifier.height(3.dp)); Text(msg.message,color=if(isMe) ShahWhite else ShahBlack,fontSize=13.sp); Spacer(Modifier.height(4.dp)); Text(msg.time,color=if(isMe) ShahWhite.copy(.7f) else ShahMediumGrey,fontSize=9.sp,modifier=Modifier.align(Alignment.End)) } }
                 }
             }
         }
-        
         var text by remember { mutableStateOf("") }
-        Surface(color = ShahWhite, tonalElevation = 8.dp) {
-            Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { /* Upload attachment */ }) {
-                    Icon(Icons.Default.AttachFile, contentDescription = null, tint = ShahMediumGrey)
-                }
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it },
-                    modifier = Modifier.weight(1f),
-                    placeholder = { Text("Type a message...", color = ShahMediumGrey) },
-                    shape = RoundedCornerShape(24.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                IconButton(onClick = { if(text.isNotBlank()) text = "" }) {
-                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = ShahGreen)
-                }
-            }
-        }
+        Surface(color=ShahWhite,shadowElevation=10.dp) { Row(Modifier.padding(8.dp),verticalAlignment=Alignment.CenterVertically) { IconButton(onClick={}){Icon(Icons.Default.AttachFile,"Attach",tint=ShahMediumGrey)}; OutlinedTextField(value=text,onValueChange={text=it},modifier=Modifier.weight(1f),placeholder={Text("Type a message...",fontSize=12.sp)},singleLine=true,shape=RoundedCornerShape(24.dp)); Spacer(Modifier.width(6.dp)); FilledIconButton(onClick={if(text.isNotBlank())text=""},shape=RoundedCornerShape(14.dp)){Icon(Icons.AutoMirrored.Filled.Send,"Send")} } }
     }
 }
