@@ -30,7 +30,17 @@ data class AttendanceRecord(
     val punchOutLng: Double? = null,
     val siteName: String = "",
     val selfieUrl: String? = null,
-    val status: String = "PRESENT"
+    val status: String = "PRESENT",
+    // Attendance/payroll metrics. These are populated by the attendance logic
+    // and intentionally kept separate from the final salary calculation.
+    val lateMinutes: Int = 0,
+    val earlyOutMinutes: Int = 0,
+    val workingMinutes: Int = 0,
+    val overtimeMinutes: Int = 0,
+    val isLate: Boolean = false,
+    val isEarlyOut: Boolean = false,
+    val punchOutMissing: Boolean = false,
+    val leaveRequestId: String = ""
 )
 
 data class ProjectModel(
