@@ -4,7 +4,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.MoreHoriz
@@ -33,24 +33,13 @@ sealed class BottomNavItem(
     data object Home : BottomNavItem("dashboard", Icons.Default.Dashboard, "Home")
     data object Attendance : BottomNavItem("attendance", Icons.Default.PunchClock, "Attendance")
     data object Employees : BottomNavItem("employees", Icons.Default.Groups, "Employees")
-    data object Chat : BottomNavItem("chat", Icons.Default.Chat, "Chat")
+    data object Chat : BottomNavItem("chat", Icons.AutoMirrored.Filled.Chat, "Chat")
     data object More : BottomNavItem("more", Icons.Default.MoreHoriz, "More")
 }
 
 @Composable
-fun MainScaffold(
-    currentRoute: String?,
-    onNavigate: (String) -> Unit,
-    content: @Composable (Modifier) -> Unit
-) {
-    val items = listOf(
-        BottomNavItem.Home,
-        BottomNavItem.Attendance,
-        BottomNavItem.Employees,
-        BottomNavItem.Chat,
-        BottomNavItem.More
-    )
-
+fun MainScaffold(currentRoute: String?, onNavigate: (String) -> Unit, content: @Composable (Modifier) -> Unit) {
+    val items = listOf(BottomNavItem.Home, BottomNavItem.Attendance, BottomNavItem.Employees, BottomNavItem.Chat, BottomNavItem.More)
     Scaffold(
         bottomBar = {
             if (shouldShowBottomBar(currentRoute)) {
@@ -60,27 +49,14 @@ fun MainScaffold(
                     shadowElevation = 12.dp,
                     shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)
                 ) {
-                    NavigationBar(
-                        containerColor = ShahWhite,
-                        tonalElevation = 0.dp
-                    ) {
+                    NavigationBar(containerColor = ShahWhite, tonalElevation = 0.dp) {
                         items.forEach { item ->
                             val selected = currentRoute == item.route
                             NavigationBarItem(
                                 selected = selected,
                                 onClick = { if (!selected) onNavigate(item.route) },
-                                icon = {
-                                    Icon(
-                                        item.icon,
-                                        contentDescription = item.label
-                                    )
-                                },
-                                label = {
-                                    Text(
-                                        item.label,
-                                        fontSize = 10.sp
-                                    )
-                                },
+                                icon = { Icon(item.icon, contentDescription = item.label) },
+                                label = { Text(item.label, fontSize = 10.sp) },
                                 alwaysShowLabel = true,
                                 colors = NavigationBarItemDefaults.colors(
                                     selectedIconColor = ShahGreen,
@@ -95,9 +71,7 @@ fun MainScaffold(
                 }
             }
         }
-    ) { paddingValues ->
-        content(Modifier.padding(paddingValues))
-    }
+    ) { paddingValues -> content(Modifier.padding(paddingValues)) }
 }
 
 private fun shouldShowBottomBar(route: String?): Boolean = route in setOf(
