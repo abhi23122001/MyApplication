@@ -18,7 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.shahsurveyors.myapplication.models.AttendanceRecord
+import com.shahsurveyors.myapplication.models.*
 import com.shahsurveyors.myapplication.ui.components.GlobalAsyncLoader
 import com.shahsurveyors.myapplication.ui.theme.*
 import java.text.SimpleDateFormat
@@ -29,7 +29,8 @@ import java.util.Locale
 fun AdminHubScreen(viewModel: AdminViewModel, onBack: () -> Unit, onNavigateToCompanySettings: () -> Unit = {}, onNavigateToBankDetails: () -> Unit = {}, onNavigateToTerms: () -> Unit = {}) {
     var selectedTab by remember { mutableIntStateOf(0) }
     LaunchedEffect(Unit) { viewModel.fetchAdminData() }
-    val titles = listOf("Logins", "Expenses", "Attendance", "Settings")
+    val titles = listOf("Approvals", "Logins", "Expenses", "Attendance", "Settings")
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -40,25 +41,106 @@ fun AdminHubScreen(viewModel: AdminViewModel, onBack: () -> Unit, onNavigateToCo
         }
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize().background(ShahGrey)) {
-            Surface(Modifier.fillMaxWidth().padding(16.dp), RoundedCornerShape(18.dp), color = ShahDarkGreen) {
-                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Surface(shape = RoundedCornerShape(12.dp), color = ShahWhite.copy(.12f)) { Icon(Icons.Default.AdminPanelSettings, null, tint = ShahWhite, modifier = Modifier.padding(10.dp).size(25.dp)) }
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) { Text("Management Console", color = ShahWhite, fontWeight = FontWeight.Bold, fontSize = 16.sp); Text("${viewModel.allEmployees.size} employees • ${viewModel.pendingUsers.size} pending approvals", fontSize = 10.sp, color = ShahWhite.copy(.72f)) }
+            ApprovalCenterCard(viewModel, onClick = { selectedTab = 0 })
+            ScrollableTabRow(
+                selectedTabIndex = selectedTab,
+                containerColor = ShahWhite,
+                contentColor = ShahGreen,
+                edgePadding = 8.dp,
+                indicator = { positions -> if (selectedTab < positions.size) TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(positions[selectedTab]), color = ShahGreen) }
+            ) {
+                titles.forEachIndexed { index, title ->
+                    Tab(selected = selectedTab == index, onClick = { selectedTab = index; if (index == 3) viewModel.refreshAttendance() }, text = { Text(title, fontWeight = FontWeight.Bold, fontSize = 11.sp) })
                 }
             }
-            ScrollableTabRow(selectedTabIndex = selectedTab, containerColor = ShahWhite, contentColor = ShahGreen, edgePadding = 8.dp, indicator = { positions -> if (selectedTab < positions.size) TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(positions[selectedTab]), color = ShahGreen) }) {
-                titles.forEachIndexed { index, title -> Tab(selected = selectedTab == index, onClick = { selectedTab = index; if (index == 2) viewModel.refreshAttendance() }, text = { Text(title, fontWeight = FontWeight.Bold, fontSize = 11.sp) }) }
-            }
             when (selectedTab) {
-                0 -> PendingLoginsList(viewModel)
-                1 -> PendingExpensesList(viewModel)
-                2 -> AdminAttendanceList(viewModel)
+                0 -> UnifiedApprovalList(viewModel)
+                1 -> PendingLoginsList(viewModel)
+                2 -> PendingExpensesList(viewModel)
+                3 -> AdminAttendanceList(viewModel)
                 else -> AdminSettingsList(onNavigateToCompanySettings, onNavigateToBankDetails, onNavigateToTerms)
             }
         }
     }
     GlobalAsyncLoader(isLoading = viewModel.isLoading)
+}
+
+@Composable
+private fun ApprovalCenterCard(viewModel: AdminViewModel, onClick: () -> Unit) {
+    Card(Modifier.fillMaxWidth().padding(14.dp).clickable(onClick = onClick), RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = ShahDarkGreen)) {
+        Row(Modifier.padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
+            Surface(shape = RoundedCornerShape(12.dp), color = ShahWhite.copy(.12f)) { Icon(Icons.Default.Approval, null, tint = ShahWhite, modifier = Modifier.padding(10.dp).size(28.dp)) }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Pending Approvals", color = ShahWhite, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text("Leave • Attendance • Expense • Salary Advance", color = ShahWhite.copy(.72f), fontSize = 10.sp)
+            }
+            Surface(shape = RoundedCornerShape(50), color = if (viewModel.pendingApprovalCount > 0) WarningAmber else ShahWhite.copy(.12f)) {
+                Text(viewModel.pendingApprovalCount.toString(), Modifier.padding(horizontal = 12.dp, vertical = 7.dp), fontWeight = FontWeight.ExtraBold, color = if (viewModel.pendingApprovalCount > 0) ShahBlack else ShahWhite)
+            }
+        }
+    }
+}
+
+@Composable
+private fun UnifiedApprovalList(viewModel: AdminViewModel) {
+    var filter by remember { mutableStateOf("ALL") }
+    val filters = listOf("ALL", "ATTENDANCE", "LEAVE", "EXPENSE", "SALARY")
+    val items = buildList {
+        if (filter == "ALL" || filter == "ATTENDANCE") addAll(viewModel.pendingAttendanceCorrections.map { ApprovalRequestItem(it.id, ApprovalType.ATTENDANCE, it.employeeName, it.issueType.replace('_', ' '), "Date: ${it.attendanceDate}", date = it.attendanceDate, reason = it.reason, createdAt = it.createdAt) })
+        if (filter == "ALL" || filter == "LEAVE") addAll(viewModel.pendingLeaves.map { ApprovalRequestItem(it.id, ApprovalType.LEAVE, it.employeeName, "${it.leaveType} Leave", "${it.fromDate} → ${it.toDate}", date = it.fromDate, reason = it.reason, createdAt = it.createdAt) })
+        if (filter == "ALL" || filter == "EXPENSE") addAll(viewModel.pendingExpenses.map { ApprovalRequestItem(it.id, ApprovalType.EXPENSE, it.userName, it.category.ifBlank { "Expense Claim" }, it.projectName.ifBlank { it.description }, amount = it.amount, date = it.date?.let { d -> SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH).format(d.toDate()) } ?: "", reason = it.description) })
+        if (filter == "ALL" || filter == "SALARY") addAll(viewModel.pendingSalaryAdvances.map { ApprovalRequestItem(it.id, ApprovalType.SALARY_ADVANCE, it.employeeName, "Salary Advance", "Requested ₹${it.amount}", amount = it.amount, date = it.requestedDate, reason = it.reason, createdAt = it.createdAt) })
+    }.sortedByDescending { it.createdAt?.seconds ?: 0L }
+
+    Column(Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            filters.forEach { value ->
+                FilterChip(selected = filter == value, onClick = { filter = value }, label = { Text(value, fontSize = 9.sp, fontWeight = FontWeight.Bold) })
+            }
+        }
+        if (items.isEmpty() && !viewModel.isLoading) {
+            EmptyAdminState(Icons.Default.TaskAlt, "No pending requests", "All approval requests are cleared.")
+            return
+        }
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            items(items, key = { "${it.type}_${it.id}" }) { request -> ApprovalRequestCard(request, viewModel) }
+        }
+    }
+}
+
+@Composable
+private fun ApprovalRequestCard(request: ApprovalRequestItem, viewModel: AdminViewModel) {
+    val icon = when (request.type) { ApprovalType.ATTENDANCE -> Icons.Default.AccessTime; ApprovalType.LEAVE -> Icons.Default.EventAvailable; ApprovalType.EXPENSE -> Icons.Default.ReceiptLong; ApprovalType.SALARY_ADVANCE -> Icons.Default.Payments }
+    Card(Modifier.fillMaxWidth(), RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = ShahWhite)) {
+        Column(Modifier.padding(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(shape = RoundedCornerShape(10.dp), color = ShahGreen.copy(.10f)) { Icon(icon, null, tint = ShahGreen, modifier = Modifier.padding(8.dp).size(24.dp)) }
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(request.employeeName, fontWeight = FontWeight.Bold, color = ShahBlack)
+                    Text(request.title, fontSize = 10.sp, color = ShahGreen, fontWeight = FontWeight.Bold)
+                    Text(request.subtitle, fontSize = 10.sp, color = ShahMediumGrey)
+                }
+                if (request.amount != null) Text("₹${request.amount}", fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
+            }
+            if (request.reason.isNotBlank()) Text("Reason: ${request.reason}", fontSize = 10.sp, color = ShahMediumGrey, modifier = Modifier.padding(top = 9.dp))
+            Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                OutlinedButton(onClick = { reviewRequest(request, false, viewModel) }) { Icon(Icons.Default.Close, "Reject"); Spacer(Modifier.width(4.dp)); Text("Reject") }
+                Spacer(Modifier.width(8.dp))
+                Button(onClick = { reviewRequest(request, true, viewModel) }, colors = ButtonDefaults.buttonColors(containerColor = ShahGreen)) { Icon(Icons.Default.Check, "Approve"); Spacer(Modifier.width(4.dp)); Text("Approve") }
+            }
+        }
+    }
+}
+
+private fun reviewRequest(request: ApprovalRequestItem, approved: Boolean, viewModel: AdminViewModel) {
+    when (request.type) {
+        ApprovalType.ATTENDANCE -> viewModel.reviewAttendanceCorrection(request.id, approved)
+        ApprovalType.LEAVE -> viewModel.reviewLeave(request.id, approved)
+        ApprovalType.EXPENSE -> viewModel.approveExpense(request.id, if (approved) "APPROVED" else "REJECTED")
+        ApprovalType.SALARY_ADVANCE -> viewModel.reviewSalaryAdvance(request.id, approved)
+    }
 }
 
 @Composable
