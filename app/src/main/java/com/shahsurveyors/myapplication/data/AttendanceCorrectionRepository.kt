@@ -2,7 +2,6 @@ package com.shahsurveyors.myapplication.data
 
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
 import com.shahsurveyors.myapplication.models.AttendanceCorrectionRequest
 import kotlinx.coroutines.tasks.await
 
@@ -28,14 +27,17 @@ class AttendanceCorrectionRepository(
 
     suspend fun getEmployeeRequests(uid: String, limit: Long = 50): List<AttendanceCorrectionRequest> {
         return requests.whereEqualTo("uid", uid)
-            .orderBy("createdAt", Query.Direction.DESCENDING)
+            .orderBy("createdAt", com.google.firebase.firestore.Query.Direction.DESCENDING)
             .limit(limit).get().await().toObjects(AttendanceCorrectionRequest::class.java)
     }
 
     suspend fun getPendingRequests(limit: Long = 100): List<AttendanceCorrectionRequest> {
+        // Avoid requiring a Firestore composite index for status + createdAt.
+        // Fetch pending requests by status, then sort locally.
         return requests.whereEqualTo("status", "PENDING")
-            .orderBy("createdAt", Query.Direction.DESCENDING)
-            .limit(limit).get().await().toObjects(AttendanceCorrectionRequest::class.java)
+            .limit(limit).get().await()
+            .toObjects(AttendanceCorrectionRequest::class.java)
+            .sortedByDescending { it.createdAt?.seconds ?: 0L }
     }
 
     suspend fun reviewRequest(id: String, approved: Boolean, adminUid: String, remark: String) {
