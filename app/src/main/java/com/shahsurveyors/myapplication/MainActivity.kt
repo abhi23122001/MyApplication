@@ -44,18 +44,12 @@ import com.shahsurveyors.myapplication.ui.tasks.*
 import com.shahsurveyors.myapplication.ui.components.MainScaffold
 import com.shahsurveyors.myapplication.ui.theme.ShahTheme
 
-
 class MainActivity : ComponentActivity() {
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         setContent {
             ShahTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
+                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     val context = LocalContext.current
                     val auth = remember { FirebaseAuth.getInstance() }
                     val firestore = remember { FirebaseFirestore.getInstance() }
@@ -75,6 +69,7 @@ class MainActivity : ComponentActivity() {
                     val dashboardRepository = remember { DashboardRepository(firestore) }
                     val leaveRepository = remember { LeaveRepository(firestore) }
                     val billingRepository = remember { BillingRepository(database.appDao()) }
+                    val salaryRepository = remember { SalaryRepository(firestore) }
 
                     val authViewModel: AuthViewModel = viewModel(factory = AuthViewModelFactory(authRepository, userRepository, sessionManager))
                     val dashboardViewModel: DashboardViewModel = viewModel(factory = DashboardViewModelFactory(dashboardRepository))
@@ -84,7 +79,7 @@ class MainActivity : ComponentActivity() {
                     val equipmentViewModel: EquipmentViewModel = viewModel(factory = EquipmentViewModelFactory(equipmentRepository))
                     val taskViewModel: TaskViewModel = viewModel(factory = TaskViewModelFactory(taskRepository))
                     val clientViewModel: ClientViewModel = viewModel(factory = ClientViewModelFactory(clientRepository))
-                    val salaryViewModel: SalaryViewModel = viewModel(factory = SalaryViewModelFactory(userRepository))
+                    val salaryViewModel: SalaryViewModel = viewModel(factory = SalaryViewModelFactory(userRepository, salaryRepository))
                     val dsrViewModel: DSRViewModel = viewModel(factory = DSRViewModelFactory(dsrRepository, storageRepository))
 
                     val navController = rememberNavController()
