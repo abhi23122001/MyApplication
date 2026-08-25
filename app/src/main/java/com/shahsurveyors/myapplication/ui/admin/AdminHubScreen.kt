@@ -195,10 +195,6 @@ fun PendingExpensesList(viewModel: AdminViewModel) {
 fun AdminAttendanceList(viewModel: AdminViewModel) {
     val attendanceCount = viewModel.attendanceSummary.size
     val activeEmployeeCount = viewModel.allEmployees.count { it.active }
-
-    // Attendance is the source of truth for people who actually punched today.
-    // If the employee profile list is temporarily incomplete, don't show Total=0
-    // while a real attendance record exists.
     val totalCount = maxOf(activeEmployeeCount, attendanceCount)
     val absentCount = (totalCount - attendanceCount).coerceAtLeast(0)
 
@@ -295,7 +291,7 @@ fun AttendanceCard(attendance: AttendanceRecord) {
                 }
             }
 
-            if (attendance.selfieUrl.isNotBlank()) {
+            if (!attendance.selfieUrl.isNullOrBlank()) {
                 Spacer(Modifier.height(8.dp))
                 Text("📷 Selfie uploaded", fontSize = 11.sp, color = SuccessGreen, fontWeight = FontWeight.Bold)
             }
