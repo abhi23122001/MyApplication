@@ -43,7 +43,7 @@ fun EquipmentTrackerScreen(viewModel: EquipmentViewModel, onBack: () -> Unit = {
 }
 
 @Composable
-private fun EquipmentSummary(title:String,value:String,icon:androidx.compose.ui.graphics.vector.ImageVector,tint:androidx.compose.ui.graphics.Color,modifier:Modifier){Card(modifier, RoundedCornerShape(14.dp),colors=CardDefaults.cardColors(containerColor=ShahWhite),elevation=CardDefaults.cardElevation(1.dp)){Column(Modifier.padding(10.dp)){Icon(icon,null,tint,Modifier.size(19.dp));Spacer(Modifier.height(5.dp));Text(value,fontWeight=FontWeight.Bold,fontSize=17.sp);Text(title,fontSize=9.sp,color=ShahMediumGrey)}}}
+private fun EquipmentSummary(title:String,value:String,icon:androidx.compose.ui.graphics.vector.ImageVector,tint:androidx.compose.ui.graphics.Color,modifier:Modifier){Card(modifier, RoundedCornerShape(14.dp),colors=CardDefaults.cardColors(containerColor=ShahWhite),elevation=CardDefaults.cardElevation(1.dp)){Column(Modifier.padding(10.dp)){Icon(imageVector=icon,contentDescription=null,tint=tint,modifier=Modifier.size(19.dp));Spacer(Modifier.height(5.dp));Text(value,fontWeight=FontWeight.Bold,fontSize=17.sp);Text(title,fontSize=9.sp,color=ShahMediumGrey)}}}
 
 @Composable
 fun EquipmentCard(item: EquipmentModel) {
