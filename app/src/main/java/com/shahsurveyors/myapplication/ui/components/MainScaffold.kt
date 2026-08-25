@@ -1,6 +1,7 @@
 package com.shahsurveyors.myapplication.ui.components
 
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Dashboard
@@ -15,7 +16,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.shahsurveyors.myapplication.ui.theme.ShahGreen
@@ -25,7 +25,7 @@ import com.shahsurveyors.myapplication.ui.theme.ShahWhite
 
 sealed class BottomNavItem(
     val route: String,
-    val icon: ImageVector,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
     val label: String
 ) {
     data object Home : BottomNavItem("dashboard", Icons.Default.Dashboard, "Home")
@@ -54,16 +54,15 @@ fun MainScaffold(
             if (shouldShowBottomBar(currentRoute)) {
                 NavigationBar(
                     containerColor = ShahWhite,
-                    tonalElevation = 3.dp
+                    tonalElevation = 6.dp,
+                    modifier = Modifier
                 ) {
                     items.forEach { item ->
                         val selected = currentRoute == item.route
 
                         NavigationBarItem(
                             selected = selected,
-                            onClick = {
-                                if (!selected) onNavigate(item.route)
-                            },
+                            onClick = { if (!selected) onNavigate(item.route) },
                             icon = {
                                 Icon(
                                     imageVector = item.icon,
@@ -76,6 +75,7 @@ fun MainScaffold(
                                     fontSize = 10.sp
                                 )
                             },
+                            alwaysShowLabel = true,
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = ShahGreen,
                                 selectedTextColor = ShahGreen,
