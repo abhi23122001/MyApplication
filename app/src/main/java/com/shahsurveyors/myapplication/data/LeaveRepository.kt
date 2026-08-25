@@ -40,23 +40,40 @@ class LeaveRepository(
     }
 
     suspend fun submitRequest(request: LeaveRequestModel): String {
+        validateDates(request.fromDate, request.toDate)
+
+        val existing = getRequestsForUser(request.userUid)
+        val newFrom = LocalDate.parse(request.fromDate.trim(), dateFormatter)
+        val newTo = LocalDate.parse(request.toDate.trim(), dateFormatter)
+        val overlaps = existing.any { old ->
+            old.status != "REJECTED" && old.status != "CANCELLED" &&
+                runCatching {
+                    val oldFrom = LocalDate.parse(old.fromDate.trim(), dateFormatter)
+                    val oldTo = LocalDate.parse(old.toDate.trim(), dateFormatter)
+                    !newTo.isBefore(oldFrom) && !newFrom.isAfter(oldTo)
+                }.getOrDefault(false)
+        }
+        require(!overlaps) { "A leave request already exists for one or more selected dates." }
+
         val ref = if (request.id.isBlank()) leaveCollection.document() else leaveCollection.document(request.id)
-        val saved = request.copy(id = ref.id, createdAt = request.createdAt ?: Timestamp.now())
+        val saved = request.copy(
+            id = ref.id,
+            status = if (request.status.isBlank()) "PENDING" else request.status,
+            createdAt = request.createdAt ?: Timestamp.now(),
+            updatedAt = Timestamp.now()
+        )
         ref.set(saved).await()
         return ref.id
     }
 
-    /**
-     * Updates the approval state. When a leave request is approved, an
-     * attendance placeholder is created for every requested date so the
-     * payroll/attendance layer can treat it as APPROVED_LEAVE instead of
-     * later marking the employee absent.
-     *
-     * Existing attendance records are never overwritten. This protects a
-     * genuine punch record if an admin approves a leave request after the
-     * employee has already punched.
-     */
-    suspend fun updateStatus(id: String, status: String, approvedBy: String) {
+    suspend fun updateStatus(
+        id: String,
+        status: String,
+        approvedBy: String,
+        adminRemark: String = ""
+    ) {
+        require(status in setOf("APPROVED", "REJECTED", "CANCELLED")) { "Invalid leave status" }
+
         val requestRef = leaveCollection.document(id)
         val request = requestRef.get().await().toObject(LeaveRequestModel::class.java)
             ?: throw IllegalArgumentException("Leave request not found")
@@ -65,13 +82,28 @@ class LeaveRepository(
             mapOf(
                 "status" to status,
                 "approvedBy" to approvedBy,
+                "adminRemark" to adminRemark.trim(),
                 "updatedAt" to Timestamp.now()
             )
         ).await()
 
         if (status == "APPROVED") {
-            createApprovedLeaveAttendance(request.copy(status = status, approvedBy = approvedBy))
+            createApprovedLeaveAttendance(
+                request.copy(
+                    status = status,
+                    approvedBy = approvedBy,
+                    adminRemark = adminRemark.trim()
+                )
+            )
         }
+    }
+
+    private fun validateDates(fromDate: String, toDate: String) {
+        val from = runCatching { LocalDate.parse(fromDate.trim(), dateFormatter) }
+            .getOrElse { throw IllegalArgumentException("Invalid From Date. Use yyyy-MM-dd") }
+        val to = runCatching { LocalDate.parse(toDate.trim(), dateFormatter) }
+            .getOrElse { throw IllegalArgumentException("Invalid To Date. Use yyyy-MM-dd") }
+        require(!to.isBefore(from)) { "To Date cannot be before From Date" }
     }
 
     private suspend fun createApprovedLeaveAttendance(request: LeaveRequestModel) {
@@ -92,7 +124,6 @@ class LeaveRepository(
             val attendanceRef = attendanceCollection.document(docId)
             val existing = attendanceRef.get().await()
 
-            // Never replace an existing punch/attendance record.
             if (!existing.exists()) {
                 batch.set(
                     attendanceRef,
@@ -122,12 +153,9 @@ class LeaveRepository(
                 )
                 pendingWrites++
             }
-
             date = date.plusDays(1)
         }
 
-        if (pendingWrites > 0) {
-            batch.commit().await()
-        }
+        if (pendingWrites > 0) batch.commit().await()
     }
 }
