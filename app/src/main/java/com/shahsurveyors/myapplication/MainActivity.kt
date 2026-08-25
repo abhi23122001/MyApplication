@@ -57,17 +57,11 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     val context = LocalContext.current
-
-                    // =====================================================
-                    // FIREBASE / REPOS
-                    // =====================================================
                     val auth = remember { FirebaseAuth.getInstance() }
                     val firestore = remember { FirebaseFirestore.getInstance() }
                     val storage = remember { FirebaseStorage.getInstance() }
-
                     val sessionManager = remember { SessionManager(context) }
                     val database = remember { AppDatabase.getDatabase(context) }
-                    
                     val authRepository = remember { AuthRepository(auth) }
                     val userRepository = remember { UserRepository(firestore) }
                     val attendanceRepository = remember { AttendanceRepository(firestore) }
@@ -82,56 +76,16 @@ class MainActivity : ComponentActivity() {
                     val leaveRepository = remember { LeaveRepository(firestore) }
                     val billingRepository = remember { BillingRepository(database.appDao()) }
 
-                    // =====================================================
-                    // VIEW MODELS
-                    // =====================================================
-
-                    val authViewModel: AuthViewModel = viewModel(
-                        factory = AuthViewModelFactory(authRepository, userRepository, sessionManager)
-                    )
-
-                    val dashboardViewModel: DashboardViewModel = viewModel(
-                        factory = DashboardViewModelFactory(dashboardRepository)
-                    )
-
-                    val attendanceViewModel: AttendanceViewModel = viewModel(
-                        factory = AttendanceViewModelFactory(attendanceRepository, storageRepository)
-                    )
-
-                    val expenseViewModel: ExpenseViewModel = viewModel(
-                        factory = ExpenseViewModelFactory(expenseRepository, storageRepository)
-                    )
-
-                    val adminViewModel: AdminViewModel = viewModel(
-                        factory = AdminViewModelFactory(
-                            billingRepository, userRepository, expenseRepository, 
-                            attendanceRepository, projectRepository, equipmentRepository, clientRepository
-                        )
-                    )
-                    
-                    val equipmentViewModel: EquipmentViewModel = viewModel(
-                        factory = EquipmentViewModelFactory(equipmentRepository)
-                    )
-                    
-                    val taskViewModel: TaskViewModel = viewModel(
-                        factory = TaskViewModelFactory(taskRepository)
-                    )
-                    
-                    val clientViewModel: ClientViewModel = viewModel(
-                        factory = ClientViewModelFactory(clientRepository)
-                    )
-                    
-                    val salaryViewModel: SalaryViewModel = viewModel(
-                        factory = SalaryViewModelFactory(userRepository)
-                    )
-                    
-                    val dsrViewModel: DSRViewModel = viewModel(
-                        factory = DSRViewModelFactory(dsrRepository, storageRepository)
-                    )
-
-                    // =====================================================
-                    // NAVIGATION
-                    // =====================================================
+                    val authViewModel: AuthViewModel = viewModel(factory = AuthViewModelFactory(authRepository, userRepository, sessionManager))
+                    val dashboardViewModel: DashboardViewModel = viewModel(factory = DashboardViewModelFactory(dashboardRepository))
+                    val attendanceViewModel: AttendanceViewModel = viewModel(factory = AttendanceViewModelFactory(attendanceRepository, storageRepository))
+                    val expenseViewModel: ExpenseViewModel = viewModel(factory = ExpenseViewModelFactory(expenseRepository, storageRepository))
+                    val adminViewModel: AdminViewModel = viewModel(factory = AdminViewModelFactory(billingRepository, userRepository, expenseRepository, attendanceRepository, projectRepository, equipmentRepository, clientRepository))
+                    val equipmentViewModel: EquipmentViewModel = viewModel(factory = EquipmentViewModelFactory(equipmentRepository))
+                    val taskViewModel: TaskViewModel = viewModel(factory = TaskViewModelFactory(taskRepository))
+                    val clientViewModel: ClientViewModel = viewModel(factory = ClientViewModelFactory(clientRepository))
+                    val salaryViewModel: SalaryViewModel = viewModel(factory = SalaryViewModelFactory(userRepository))
+                    val dsrViewModel: DSRViewModel = viewModel(factory = DSRViewModelFactory(dsrRepository, storageRepository))
 
                     val navController = rememberNavController()
                     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -147,44 +101,19 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     ) { modifier ->
-
-                        NavHost(
-                            navController = navController,
-                            startDestination = "splash",
-                            modifier = modifier
-                        ) {
-
+                        NavHost(navController = navController, startDestination = "splash", modifier = modifier) {
                             composable("splash") {
-                                SplashScreen(
-                                    onAnimationFinished = {
-                                        val destination = if (authViewModel.isUserLoggedIn) "dashboard" else "login"
-                                        navController.navigate(destination) {
-                                            popUpTo("splash") { inclusive = true }
-                                        }
-                                    }
-                                )
+                                SplashScreen(onAnimationFinished = {
+                                    val destination = if (authViewModel.isUserLoggedIn) "dashboard" else "login"
+                                    navController.navigate(destination) { popUpTo("splash") { inclusive = true } }
+                                })
                             }
-
                             composable("login") {
-                                LoginScreen(
-                                    viewModel = authViewModel,
-                                    onSignupClick = { navController.navigate("signup") },
-                                    onLoginSuccess = {
-                                        navController.navigate("dashboard") {
-                                            popUpTo("login") { inclusive = true }
-                                            launchSingleTop = true
-                                        }
-                                    }
-                                )
+                                LoginScreen(viewModel = authViewModel, onSignupClick = { navController.navigate("signup") }, onLoginSuccess = {
+                                    navController.navigate("dashboard") { popUpTo("login") { inclusive = true }; launchSingleTop = true }
+                                })
                             }
-
-                            composable("signup") {
-                                SignupScreen(
-                                    viewModel = authViewModel,
-                                    onBackToLogin = { navController.popBackStack() }
-                                )
-                            }
-
+                            composable("signup") { SignupScreen(viewModel = authViewModel, onBackToLogin = { navController.popBackStack() }) }
                             composable("dashboard") {
                                 DashboardScreen(
                                     viewModel = dashboardViewModel,
@@ -196,7 +125,7 @@ class MainActivity : ComponentActivity() {
                                     onNavigateToTasks = { navController.navigate("tasks") },
                                     onNavigateToSurvey = { navController.navigate("survey") },
                                     onNavigateToChat = { navController.navigate("chat") },
-                                    onNavigateToAdmin = { navController.navigate("admin_hub") },
+                                    onNavigateToAdmin = { navController.navigate("employees") },
                                     onNavigateToBilling = { navController.navigate("billing") },
                                     onNavigateToExpense = { navController.navigate("expense") },
                                     onNavigateToDsr = { navController.navigate("dsr") },
@@ -205,139 +134,29 @@ class MainActivity : ComponentActivity() {
                                     onRefresh = { dashboardViewModel.refresh() }
                                 )
                             }
-
                             composable("attendance") {
-                                LaunchedEffect(authViewModel.currentUserUid) {
-                                    authViewModel.currentUserUid?.let { attendanceViewModel.checkStatus(it) }
-                                }
-
-                                AttendanceScreen(
-                                    uid = authViewModel.currentUserUid ?: "",
-                                    userName = authViewModel.userName
-                                )
+                                LaunchedEffect(authViewModel.currentUserUid) { authViewModel.currentUserUid?.let { attendanceViewModel.checkStatus(it) } }
+                                AttendanceScreen(uid = authViewModel.currentUserUid ?: "", userName = authViewModel.userName)
                             }
-
-                            composable("employees") {
-                                EmployeeManagementScreen(
-                                    viewModel = adminViewModel,
-                                    onBack = { navController.popBackStack() }
-                                )
-                            }
-
-                            composable("leave") {
-                                LeaveManagementScreen(
-                                    repository = leaveRepository,
-                                    uid = authViewModel.currentUserUid ?: "",
-                                    userName = authViewModel.userName,
-                                    userRole = authViewModel.userRole,
-                                    onBack = { navController.popBackStack() }
-                                )
-                            }
-
-                            composable("chat") {
-                                RadarScreen(onBack = { navController.popBackStack() })
-                            }
-
-                            composable("more") {
-                                MoreModulesScreen(onNavigate = { route -> navController.navigate(route) })
-                            }
-
-                            composable("equipment") {
-                                EquipmentTrackerScreen(
-                                    viewModel = equipmentViewModel,
-                                    onBack = { navController.popBackStack() }
-                                )
-                            }
-
-                            composable("tasks") {
-                                TaskManagementScreen(
-                                    viewModel = taskViewModel,
-                                    uid = authViewModel.currentUserUid ?: "",
-                                    onBack = { navController.popBackStack() }
-                                )
-                            }
-
-                            composable("survey") {
-                                SurveyCalculatorScreen(onBack = { navController.popBackStack() })
-                            }
-
-                            composable("settings") {
-                                GeoFenceSettingsScreen(onBack = { navController.popBackStack() })
-                            }
-
-                            composable("admin_hub") {
-                                AdminHubScreen(
-                                    viewModel = adminViewModel,
-                                    onBack = { navController.popBackStack() },
-                                    onNavigateToCompanySettings = { navController.navigate("company_settings") },
-                                    onNavigateToBankDetails = { navController.navigate("bank_details") },
-                                    onNavigateToTerms = { navController.navigate("terms_conditions") }
-                                )
-                            }
-
-                            composable("company_settings") {
-                                CompanySettingsScreen(viewModel = adminViewModel, onBack = { navController.popBackStack() })
-                            }
-
-                            composable("bank_details") {
-                                BankDetailsScreen(viewModel = adminViewModel, onBack = { navController.popBackStack() })
-                            }
-
-                            composable("terms_conditions") {
-                                TermsAndConditionsScreen(viewModel = adminViewModel, onBack = { navController.popBackStack() })
-                            }
-
-                            composable("salary") {
-                                SalaryManagementScreen(
-                                    viewModel = salaryViewModel,
-                                    onBack = { navController.popBackStack() }
-                                )
-                            }
-
-                            composable("billing") {
-                                val billingViewModel: BillingViewModel = viewModel(
-                                    factory = BillingViewModelFactory(billingRepository)
-                                )
-                                BillingScreen(viewModel = billingViewModel, onBack = { navController.popBackStack() })
-                            }
-
-                            composable("expense") {
-                                ExpenseClaimsScreen(
-                                    viewModel = expenseViewModel,
-                                    uid = authViewModel.currentUserUid ?: "",
-                                    userName = authViewModel.userName,
-                                    onBack = { navController.popBackStack() }
-                                )
-                            }
-
-                            composable("dsr") {
-                                DailyStatusReportScreen(
-                                    viewModel = dsrViewModel,
-                                    onBack = { navController.popBackStack() }
-                                )
-                            }
-
-                            composable("clients") {
-                                CRMClientScreen(
-                                    viewModel = clientViewModel,
-                                    onBack = { navController.popBackStack() }
-                                )
-                            }
-
-                            composable("projects") {
-                                Box(
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentAlignment = androidx.compose.ui.Alignment.Center
-                                ) {
-                                    androidx.compose.material3.Text(
-                                        text = "Projects module"
-                                    )
-                                }
-                            }
-
-                            composable("marketing") {
-                                Box(modifier = Modifier.fillMaxSize())
-                            }
+                            composable("employees") { EmployeeManagementScreen(viewModel = adminViewModel, onBack = { navController.popBackStack() }) }
+                            composable("leave") { LeaveManagementScreen(repository = leaveRepository, uid = authViewModel.currentUserUid ?: "", userName = authViewModel.userName, userRole = authViewModel.userRole, onBack = { navController.popBackStack() }) }
+                            composable("chat") { RadarScreen(onBack = { navController.popBackStack() }) }
+                            composable("more") { MoreModulesScreen(onNavigate = { route -> navController.navigate(route) }) }
+                            composable("equipment") { EquipmentTrackerScreen(viewModel = equipmentViewModel, onBack = { navController.popBackStack() }) }
+                            composable("tasks") { TaskManagementScreen(viewModel = taskViewModel, uid = authViewModel.currentUserUid ?: "", onBack = { navController.popBackStack() }) }
+                            composable("survey") { SurveyCalculatorScreen(onBack = { navController.popBackStack() }) }
+                            composable("settings") { GeoFenceSettingsScreen(onBack = { navController.popBackStack() }) }
+                            composable("admin_hub") { AdminHubScreen(viewModel = adminViewModel, onBack = { navController.popBackStack() }, onNavigateToCompanySettings = { navController.navigate("company_settings") }, onNavigateToBankDetails = { navController.navigate("bank_details") }, onNavigateToTerms = { navController.navigate("terms_conditions") }) }
+                            composable("company_settings") { CompanySettingsScreen(viewModel = adminViewModel, onBack = { navController.popBackStack() }) }
+                            composable("bank_details") { BankDetailsScreen(viewModel = adminViewModel, onBack = { navController.popBackStack() }) }
+                            composable("terms_conditions") { TermsAndConditionsScreen(viewModel = adminViewModel, onBack = { navController.popBackStack() }) }
+                            composable("salary") { SalaryManagementScreen(viewModel = salaryViewModel, onBack = { navController.popBackStack() }) }
+                            composable("billing") { val billingViewModel: BillingViewModel = viewModel(factory = BillingViewModelFactory(billingRepository)); BillingScreen(viewModel = billingViewModel, onBack = { navController.popBackStack() }) }
+                            composable("expense") { ExpenseClaimsScreen(viewModel = expenseViewModel, uid = authViewModel.currentUserUid ?: "", userName = authViewModel.userName, onBack = { navController.popBackStack() }) }
+                            composable("dsr") { DailyStatusReportScreen(viewModel = dsrViewModel, onBack = { navController.popBackStack() }) }
+                            composable("clients") { CRMClientScreen(viewModel = clientViewModel, onBack = { navController.popBackStack() }) }
+                            composable("projects") { Box(modifier = Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) { androidx.compose.material3.Text(text = "Projects module") } }
+                            composable("marketing") { Box(modifier = Modifier.fillMaxSize()) }
                         }
                     }
                 }
