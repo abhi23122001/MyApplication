@@ -33,6 +33,7 @@ class AdminViewModel(
     private val firestore = FirebaseFirestore.getInstance()
     private val leaveRepository = LeaveRepository(firestore)
     private val attendanceCorrectionRepository = AttendanceCorrectionRepository(firestore)
+    private val advanceSalaryRepository = AdvanceSalaryRepository(firestore)
 
     var isLoading by mutableStateOf(false)
         private set
@@ -48,7 +49,7 @@ class AdminViewModel(
         private set
     var pendingAttendanceCorrections by mutableStateOf<List<AttendanceCorrectionRequest>>(emptyList())
         private set
-    var pendingSalaryAdvances by mutableStateOf<List<SalaryAdvanceRequest>>(emptyList())
+    var pendingSalaryAdvances by mutableStateOf<List<AdvanceSalaryRequest>>(emptyList())
         private set
     var attendanceSummary by mutableStateOf<List<AttendanceRecord>>(emptyList())
         private set
@@ -76,9 +77,7 @@ class AdminViewModel(
                 pendingExpenses = expenseRepository.getAllExpenses().filter { it.status == "PENDING" }
                 pendingLeaves = leaveRepository.getAllRequests().filter { it.status == "PENDING" }
                 pendingAttendanceCorrections = attendanceCorrectionRepository.getPendingRequests()
-                pendingSalaryAdvances = firestore.collection("salaryAdvanceRequests")
-                    .whereEqualTo("status", "PENDING")
-                    .get().await().toObjects(SalaryAdvanceRequest::class.java)
+                pendingSalaryAdvances = advanceSalaryRepository.getPending()
                 loadTodayAttendance()
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -161,9 +160,16 @@ class AdminViewModel(
         viewModelScope.launch {
             try {
                 val adminUid = FirebaseAuth.getInstance().currentUser?.uid ?: "ADMIN"
-                firestore.collection("salaryAdvanceRequests").document(id).update(
-                    mapOf("status" to if (approved) "APPROVED" else "REJECTED", "approvedBy" to adminUid, "adminRemark" to remark, "updatedAt" to Timestamp.now())
-                ).await()
+                val adminName = allEmployees.firstOrNull { it.uid == adminUid }?.name ?: "Admin"
+                val request = pendingSalaryAdvances.firstOrNull { it.id == id }
+                val approvedAmount = if (approved) (request?.amount ?: 0.0) else 0.0
+                advanceSalaryRepository.updateDecision(
+                    id = id,
+                    status = if (approved) "APPROVED" else "REJECTED",
+                    approvedAmount = approvedAmount,
+                    adminUid = adminUid,
+                    adminName = if (remark.isBlank()) adminName else "$adminName - $remark"
+                )
                 fetchAdminData()
             } catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to review salary advance" }
         }
