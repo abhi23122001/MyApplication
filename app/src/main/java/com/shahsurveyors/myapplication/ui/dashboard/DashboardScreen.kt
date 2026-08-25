@@ -69,11 +69,7 @@ fun DashboardScreen(
             TopAppBar(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Image(
-                            painter = painterResource(id = R.drawable.app_logo),
-                            contentDescription = "SHAH ERP",
-                            modifier = Modifier.size(36.dp)
-                        )
+                        Image(painter = painterResource(id = R.drawable.app_logo), contentDescription = "SHAH ERP", modifier = Modifier.size(36.dp))
                         Spacer(Modifier.width(10.dp))
                         Column {
                             Text("SHAH ERP", style = MaterialTheme.typography.titleMedium, color = ShahWhite, fontWeight = FontWeight.Bold)
@@ -82,21 +78,12 @@ fun DashboardScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = onRefresh) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = ShahWhite)
-                    }
+                    IconButton(onClick = onRefresh) { Icon(Icons.Default.Refresh, "Refresh", tint = ShahWhite) }
                     BadgedBox(badge = { if (notificationCount > 0) Badge { Text(notificationCount.toString()) } }) {
-                        IconButton(onClick = { showNotifications = true }) {
-                            Icon(Icons.Default.Notifications, contentDescription = "Notifications", tint = ShahWhite)
-                        }
+                        IconButton(onClick = { showNotifications = true }) { Icon(Icons.Default.Notifications, "Notifications", tint = ShahWhite) }
                     }
                     Spacer(Modifier.width(4.dp))
-                    Image(
-                        painter = painterResource(id = R.drawable.app_logo),
-                        contentDescription = "Profile",
-                        modifier = Modifier.size(32.dp).clip(CircleShape).background(ShahWhite),
-                        contentScale = ContentScale.Inside
-                    )
+                    Image(painter = painterResource(id = R.drawable.app_logo), contentDescription = "Profile", modifier = Modifier.size(32.dp).clip(CircleShape).background(ShahWhite), contentScale = ContentScale.Inside)
                     Spacer(Modifier.width(14.dp))
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = ShahDarkGreen)
@@ -109,11 +96,7 @@ fun DashboardScreen(
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
             item {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
-                    color = ShahDarkGreen
-                ) {
+                Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), color = ShahDarkGreen) {
                     Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text("Good day, $userRole", color = ShahWhite.copy(alpha = 0.78f), fontSize = 12.sp)
@@ -129,11 +112,8 @@ fun DashboardScreen(
                     }
                 }
             }
-
-            item { SummarySection(viewModel, isAdmin) }
-
+            item { SummarySection(viewModel, isAdmin, onNavigateToAdmin) }
             item { BroadcastSection(viewModel.noticeMessage.ifBlank { "No new admin announcements." }) }
-
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
@@ -148,16 +128,14 @@ fun DashboardScreen(
         }
     }
 
-    if (showNotifications) {
-        NotificationCenter(viewModel = viewModel, onDismiss = { showNotifications = false })
-    }
+    if (showNotifications) NotificationCenter(viewModel = viewModel, onDismiss = { showNotifications = false })
 }
 
 @Composable
-fun SummarySection(viewModel: DashboardViewModel, isAdmin: Boolean) {
+fun SummarySection(viewModel: DashboardViewModel, isAdmin: Boolean, onEmployeesClick: () -> Unit = {}) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            SummaryCard("Employees", viewModel.totalEmployees.toString(), Icons.Default.People, ShahGreen, Modifier.weight(1f))
+            SummaryCard("Employees", viewModel.totalEmployees.toString(), Icons.Default.People, ShahGreen, Modifier.weight(1f), onEmployeesClick)
             SummaryCard("Attendance", "${viewModel.presentToday} Present", Icons.Default.CheckCircle, SuccessGreen, Modifier.weight(1f))
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -174,8 +152,10 @@ fun SummarySection(viewModel: DashboardViewModel, isAdmin: Boolean) {
 }
 
 @Composable
-fun SummaryCard(title: String, value: String, icon: ImageVector, color: Color, modifier: Modifier = Modifier) {
+fun SummaryCard(title: String, value: String, icon: ImageVector, color: Color, modifier: Modifier = Modifier, onClick: (() -> Unit)? = null) {
     Card(
+        onClick = onClick ?: {},
+        enabled = onClick != null,
         modifier = modifier,
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = ShahWhite),
@@ -195,11 +175,7 @@ fun SummaryCard(title: String, value: String, icon: ImageVector, color: Color, m
 
 @Composable
 fun BroadcastSection(message: String) {
-    Surface(
-        color = ShahGreen.copy(alpha = 0.06f),
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, ShahGreen.copy(alpha = 0.18f))
-    ) {
+    Surface(color = ShahGreen.copy(alpha = 0.06f), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, ShahGreen.copy(alpha = 0.18f))) {
         Row(Modifier.padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
             Surface(shape = RoundedCornerShape(11.dp), color = ShahGreen.copy(alpha = 0.12f)) {
                 Icon(Icons.Default.Campaign, null, tint = ShahGreen, modifier = Modifier.padding(9.dp).size(22.dp))
@@ -214,39 +190,21 @@ fun BroadcastSection(message: String) {
     }
 }
 
-private data class QuickAction(
-    val title: String,
-    val icon: ImageVector,
-    val onClick: () -> Unit
-)
+private data class QuickAction(val title: String, val icon: ImageVector, val onClick: () -> Unit)
 
 @Composable
-fun QuickActionsGrid(
-    onAttendance: () -> Unit,
-    onExpense: () -> Unit,
-    onAdmin: () -> Unit,
-    onBilling: () -> Unit,
-    isAdmin: Boolean
-) {
+fun QuickActionsGrid(onAttendance: () -> Unit, onExpense: () -> Unit, onAdmin: () -> Unit, onBilling: () -> Unit, isAdmin: Boolean) {
     val actions = buildList {
         add(QuickAction("Punch IN / OUT", Icons.Default.AccessTime, onAttendance))
         add(QuickAction("Add Expense", Icons.Default.ReceiptLong, onExpense))
         add(QuickAction("Create Quote", Icons.Default.Description, onBilling))
         if (isAdmin) add(QuickAction("Add Employee", Icons.Default.PersonAdd, onAdmin))
     }
-
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         actions.chunked(2).forEach { rowActions ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 rowActions.forEach { action ->
-                    OutlinedButton(
-                        onClick = action.onClick,
-                        modifier = Modifier.weight(1f).height(68.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(containerColor = ShahWhite, contentColor = ShahGreen),
-                        border = BorderStroke(1.dp, ShahGreen.copy(alpha = 0.18f)),
-                        contentPadding = PaddingValues(10.dp)
-                    ) {
+                    OutlinedButton(onClick = action.onClick, modifier = Modifier.weight(1f).height(68.dp), shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.outlinedButtonColors(containerColor = ShahWhite, contentColor = ShahGreen), border = BorderStroke(1.dp, ShahGreen.copy(alpha = 0.18f)), contentPadding = PaddingValues(10.dp)) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(action.icon, null, modifier = Modifier.size(22.dp))
                             Spacer(Modifier.height(5.dp))
