@@ -112,15 +112,12 @@ class SalaryRepository(
             }
             if (profile == null) return@forEach
 
-            val dailyEquivalent = if (profile.payType == "DAILY") {
-                profile.dailyRate
-            } else {
-                profile.monthlySalary / workingDayCount
-            }
+            val dailyEquivalent = if (profile.payType == "DAILY") profile.dailyRate
+            else profile.monthlySalary / workingDayCount
 
             val isPaidLeave = paidLeaveDates.contains(date)
             val isUnpaidLeave = unpaidLeaveDates.contains(date)
-            val isPresent = record?.status in payableStatuses
+            val isPresent = record?.status?.let { it in payableStatuses } == true
 
             when {
                 isPaidLeave -> {
