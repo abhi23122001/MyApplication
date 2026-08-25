@@ -251,7 +251,7 @@ private suspend fun createEmployeeAccount(
             )
         )
     } finally {
-        secondaryApp.delete().await()
+        secondaryApp.delete()
     }
 }
 
