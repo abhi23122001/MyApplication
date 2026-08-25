@@ -4,17 +4,16 @@ import com.shahsurveyors.myapplication.data.AttendanceRepository
 import com.shahsurveyors.myapplication.data.LeaveRepository
 import com.shahsurveyors.myapplication.data.SalaryRepository
 import com.shahsurveyors.myapplication.data.UserRepository
+import com.shahsurveyors.myapplication.models.LeaveRequestModel
+import com.shahsurveyors.myapplication.models.SalaryProfileModel
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
 
 /**
- * Single payroll calculation point.
- * Monthly employees are paid their configured monthly salary less absence
- * deductions, while daily employees are paid only for worked days. Approved
- * leave is paid for monthly employees. Overtime is added for both types.
- * Late/early/missing-punch metrics remain visible but are not silently
- * deducted because no company deduction rule has been configured yet.
+ * Single payroll calculation point. Salary changes are effective-date based,
+ * so a change in the middle of a month is prorated by working day instead of
+ * incorrectly applying the new salary to the entire month.
  */
 class PayrollCalculator(
     private val userRepository: UserRepository = UserRepository(),
@@ -32,10 +31,17 @@ class PayrollCalculator(
         val result = mutableListOf<SalaryData>()
 
         userRepository.getAllEmployees().forEach { user ->
-            val profile = salaryRepository.getHistory(user.uid)
+            val history = salaryRepository.getHistory(user.uid)
                 .filter { it.effectiveFrom.isNotBlank() }
-                .firstOrNull { it.effectiveFrom <= end && (it.effectiveTo == null || it.effectiveTo!! > start) }
-                ?: return@forEach
+                .sortedByDescending { it.effectiveFrom }
+            if (history.isEmpty()) return@forEach
+
+            fun profileFor(date: LocalDate): SalaryProfileModel? {
+                val value = date.toString()
+                return history.firstOrNull {
+                    it.effectiveFrom <= value && (it.effectiveTo == null || it.effectiveTo!! > value)
+                }
+            }
 
             val attendance = attendanceRepository.getAttendanceForMonth(user.uid, start, end)
             val approvedLeaveDates = expandApprovedLeaveDates(leaveRepository.getRequestsForUser(user.uid), monthStart, monthEnd)
@@ -44,6 +50,7 @@ class PayrollCalculator(
                 .mapNotNull { runCatching { LocalDate.parse(it.date) }.getOrNull() }
                 .filter(::isWorkingDay)
                 .toSet()
+            val paidLeaveDates = approvedLeaveDates + attendanceLeaveDates
 
             val presentDates = attendance
                 .filter { it.status != "APPROVED_LEAVE" && it.punchInTime != null }
@@ -51,22 +58,55 @@ class PayrollCalculator(
                 .filter(::isWorkingDay)
                 .toSet()
 
-            // A date can never be both present and paid leave for payroll purposes.
-            val paidLeaveDates = (approvedLeaveDates + attendanceLeaveDates) - presentDates
             val presentDays = presentDates.size
-            val leaveDays = paidLeaveDates.size
-            val absentDays = (scheduledWorkingDays - presentDays - leaveDays).coerceAtLeast(0)
+            val leaveDays = (paidLeaveDates - presentDates).size
+            var absentDays = 0
+            var monthlyGross = 0.0
+            var absenceDeduction = 0.0
+            var dailyGross = 0.0
+
+            var date = monthStart
+            while (!date.isAfter(monthEnd)) {
+                if (isWorkingDay(date)) {
+                    val profile = profileFor(date)
+                    val payable = presentDates.contains(date) || paidLeaveDates.contains(date)
+                    if (profile != null && profile.payType == "MONTHLY") {
+                        val daySalary = profile.monthlySalary / scheduledWorkingDays.coerceAtLeast(1)
+                        monthlyGross += daySalary
+                        if (!payable) {
+                            absentDays++
+                            absenceDeduction += daySalary
+                        }
+                    } else if (profile != null && profile.payType == "DAILY") {
+                        if (presentDates.contains(date)) dailyGross += profile.dailyRate
+                        else if (!paidLeaveDates.contains(date)) absentDays++
+                    } else if (!payable) {
+                        absentDays++
+                    }
+                }
+                date = date.plusDays(1)
+            }
+
+            val overtimeMinutes = attendance.sumOf { it.overtimeMinutes.coerceAtLeast(0) }
+            val overtimePay = attendance.sumOf { record ->
+                val recordDate = runCatching { LocalDate.parse(record.date) }.getOrNull()
+                val rate = recordDate?.let { profileFor(it)?.overtimeRatePerHour } ?: 0.0
+                record.overtimeMinutes.coerceAtLeast(0) / 60.0 * rate
+            }
             val lateCount = attendance.count { it.isLate && it.status != "APPROVED_LEAVE" }
             val earlyOutCount = attendance.count { it.isEarlyOut && it.status != "APPROVED_LEAVE" }
             val missingPunchOutCount = attendance.count { it.punchOutMissing }
-            val overtimeMinutes = attendance.sumOf { it.overtimeMinutes.coerceAtLeast(0) }
-            val overtimePay = overtimeMinutes / 60.0 * profile.overtimeRatePerHour
 
-            val basePay = if (profile.payType == "DAILY") presentDays * profile.dailyRate else profile.monthlySalary
-            val absenceDeduction = if (profile.payType == "MONTHLY" && scheduledWorkingDays > 0) {
-                profile.monthlySalary / scheduledWorkingDays * absentDays
-            } else 0.0
+            val latestProfile = history.firstOrNull { it.effectiveFrom <= end } ?: history.last()
+            val basePay = if (latestProfile.payType == "DAILY" && history.any { it.payType == "MONTHLY" }) {
+                monthlyGross + dailyGross
+            } else if (history.any { it.payType == "MONTHLY" }) {
+                monthlyGross + dailyGross
+            } else {
+                dailyGross
+            }
             val net = (basePay - absenceDeduction + overtimePay).coerceAtLeast(0.0)
+            val displayPayType = if (history.filter { it.effectiveFrom <= end }.map { it.payType }.distinct().size > 1) "MIXED" else latestProfile.payType
 
             result += SalaryData(
                 id = user.uid.take(6),
@@ -86,7 +126,7 @@ class PayrollCalculator(
                 netSalary = net,
                 month = month.toString(),
                 year = month.year,
-                payType = profile.payType,
+                payType = displayPayType,
                 status = "PENDING"
             )
         }
@@ -106,7 +146,7 @@ class PayrollCalculator(
     private fun isWorkingDay(date: LocalDate): Boolean = date.dayOfWeek != DayOfWeek.SUNDAY
 
     private fun expandApprovedLeaveDates(
-        requests: List<com.shahsurveyors.myapplication.models.LeaveRequestModel>,
+        requests: List<LeaveRequestModel>,
         monthStart: LocalDate,
         monthEnd: LocalDate
     ): Set<LocalDate> {
