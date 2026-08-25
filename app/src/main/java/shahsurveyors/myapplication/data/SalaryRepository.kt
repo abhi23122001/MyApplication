@@ -19,18 +19,14 @@ class SalaryRepository(
     private val leaveCollection = firestore.collection("leaveRequests")
     private val dateFormatter = DateTimeFormatter.ISO_LOCAL_DATE
 
-    suspend fun getHistory(employeeUid: String): List<SalaryProfileModel> {
-        return collection
-            .whereEqualTo("employeeUid", employeeUid)
-            .get()
-            .await()
+    suspend fun getHistory(employeeUid: String): List<SalaryProfileModel> =
+        collection.whereEqualTo("employeeUid", employeeUid)
+            .get().await()
             .toObjects(SalaryProfileModel::class.java)
             .sortedByDescending { it.effectiveFrom }
-    }
 
-    suspend fun getCurrent(employeeUid: String): SalaryProfileModel? {
-        return getHistory(employeeUid).firstOrNull { it.active }
-    }
+    suspend fun getCurrent(employeeUid: String): SalaryProfileModel? =
+        getHistory(employeeUid).firstOrNull { it.active }
 
     suspend fun saveSalaryProfile(profile: SalaryProfileModel): String {
         require(profile.employeeUid.isNotBlank()) { "Employee is required" }
@@ -42,27 +38,24 @@ class SalaryRepository(
         val previous = getCurrent(profile.employeeUid)
         if (previous != null && previous.id.isNotBlank()) {
             collection.document(previous.id).update(
-                mapOf(
-                    "active" to false,
-                    "effectiveTo" to profile.effectiveFrom
-                )
+                mapOf("active" to false, "effectiveTo" to profile.effectiveFrom)
             ).await()
         }
 
         val ref = if (profile.id.isBlank()) collection.document() else collection.document(profile.id)
-        val saved = profile.copy(
-            id = ref.id,
-            setAt = profile.setAt ?: Timestamp.now(),
-            active = true
-        )
-        ref.set(saved).await()
+        ref.set(profile.copy(id = ref.id, setAt = profile.setAt ?: Timestamp.now(), active = true)).await()
         return ref.id
     }
 
     /**
-     * Calculates one employee's payroll for the requested calendar month.
-     * Sunday is treated as the default weekly off. This is intentionally kept
-     * as a payroll rule rather than hard-coding salary values into the UI.
+     * Payroll rules used by the app:
+     * - Sunday is the default weekly off.
+     * - Monthly employees earn monthlySalary / working-days for each payable day.
+     * - Daily employees earn dailyRate for each payable day.
+     * - Approved non-UNPAID leave is paid; approved UNPAID leave is not.
+     * - Absent/unpaid days are deducted automatically.
+     * - Late + early-out minutes are deducted using an 8-hour daily rate.
+     * - Overtime uses the employee's admin-defined overtimeRatePerHour.
      */
     suspend fun calculateMonthlyPayroll(
         employeeUid: String,
@@ -73,9 +66,7 @@ class SalaryRepository(
         val history = getHistory(employeeUid)
         val firstDay = month.atDay(1)
         val lastDay = month.atEndOfMonth()
-        val attendance = getAttendanceForUser(employeeUid)
-            .filter { it.date.isNotBlank() }
-            .associateBy { it.date }
+        val attendance = getAttendanceForUser(employeeUid).associateBy { it.date }
         val leaveRequests = getLeaveRequestsForUser(employeeUid)
 
         val paidLeaveDates = mutableSetOf<LocalDate>()
@@ -86,11 +77,8 @@ class SalaryRepository(
             var date = maxOf(from, firstDay)
             val end = minOf(to, lastDay)
             while (!date.isAfter(end)) {
-                if (request.leaveType.equals("UNPAID", ignoreCase = true)) {
-                    unpaidLeaveDates += date
-                } else {
-                    paidLeaveDates += date
-                }
+                if (request.leaveType.equals("UNPAID", ignoreCase = true)) unpaidLeaveDates += date
+                else paidLeaveDates += date
                 date = date.plusDays(1)
             }
         }
@@ -98,6 +86,7 @@ class SalaryRepository(
         val workingDates = generateSequence(firstDay) { current ->
             if (current.isBefore(lastDay)) current.plusDays(1) else null
         }.filter { it.dayOfWeek.value != 7 }.toList()
+        val workingDayCount = workingDates.size.coerceAtLeast(1)
 
         var presentDays = 0
         var paidLeaveDays = 0
@@ -111,6 +100,8 @@ class SalaryRepository(
         var lateEarlyDeduction = 0.0
         var overtimePay = 0.0
 
+        val payableStatuses = setOf("PRESENT", "LATE", "EARLY_OUT", "MISSING_PUNCH_OUT")
+
         workingDates.forEach { date ->
             val dateString = date.format(dateFormatter)
             val record = attendance[dateString]
@@ -119,52 +110,50 @@ class SalaryRepository(
                     p.effectiveFrom <= dateString &&
                     (p.effectiveTo.isNullOrBlank() || dateString < p.effectiveTo!!)
             }
+            if (profile == null) return@forEach
 
-            if (paidLeaveDates.contains(date)) {
-                paidLeaveDays++
-            } else if (unpaidLeaveDates.contains(date)) {
-                unpaidLeaveDays++
-            } else if (record?.status == "PRESENT" || record?.status == "LATE" || record?.status == "EARLY_OUT" || record?.status == "MISSING_PUNCH_OUT") {
-                presentDays++
+            val dailyEquivalent = if (profile.payType == "DAILY") {
+                profile.dailyRate
             } else {
-                absentDays++
+                profile.monthlySalary / workingDayCount
+            }
+
+            val isPaidLeave = paidLeaveDates.contains(date)
+            val isUnpaidLeave = unpaidLeaveDates.contains(date)
+            val isPresent = record?.status in payableStatuses
+
+            when {
+                isPaidLeave -> {
+                    paidLeaveDays++
+                    baseSalary += dailyEquivalent
+                }
+                isUnpaidLeave -> {
+                    unpaidLeaveDays++
+                    attendanceDeduction += dailyEquivalent
+                }
+                isPresent -> {
+                    presentDays++
+                    baseSalary += dailyEquivalent
+                }
+                else -> {
+                    absentDays++
+                    attendanceDeduction += dailyEquivalent
+                }
             }
 
             if (record != null) {
-                lateMinutes += record.lateMinutes.coerceAtLeast(0)
-                earlyOutMinutes += record.earlyOutMinutes.coerceAtLeast(0)
-                overtimeMinutes += record.overtimeMinutes.coerceAtLeast(0)
+                val late = record.lateMinutes.coerceAtLeast(0)
+                val early = record.earlyOutMinutes.coerceAtLeast(0)
+                val overtime = record.overtimeMinutes.coerceAtLeast(0)
+                lateMinutes += late
+                earlyOutMinutes += early
+                overtimeMinutes += overtime
+                lateEarlyDeduction += (dailyEquivalent / 480.0) * (late + early)
+                overtimePay += profile.overtimeRatePerHour.coerceAtLeast(0.0) * (overtime / 60.0)
             }
-
-            if (profile != null) {
-                val dailyEquivalent = when (profile.payType) {
-                    "DAILY" -> profile.dailyRate
-                    else -> profile.monthlySalary / workingDates.size.coerceAtLeast(1)
-                }
-                val payable = paidLeaveDates.contains(date) ||
-                    (!unpaidLeaveDates.contains(date) && record?.status in setOf("PRESENT", "LATE", "EARLY_OUT", "MISSING_PUNCH_OUT"))
-                if (payable) baseSalary += dailyEquivalent
-
-                val minuteRate = dailyEquivalent / 480.0 // 8-hour working day
-                if (record != null) {
-                    lateEarlyDeduction += minuteRate * (record.lateMinutes.coerceAtLeast(0) + record.earlyOutMinutes.coerceAtLeast(0))
-                    overtimePay += profile.overtimeRatePerHour.coerceAtLeast(0.0) * (record.overtimeMinutes.coerceAtLeast(0) / 60.0)
-                }
-            }
-        }
-
-        // Absent/unpaid leave is already excluded from baseSalary. Keep this
-        // field explicit so the salary slip can show the attendance impact.
-        attendanceDeduction = when {
-            history.firstOrNull()?.payType == "MONTHLY" -> {
-                val currentMonthly = history.firstOrNull { it.effectiveFrom <= firstDay.toString() }?.monthlySalary ?: 0.0
-                (currentMonthly - baseSalary).coerceAtLeast(0.0)
-            }
-            else -> 0.0
         }
 
         val net = (baseSalary - lateEarlyDeduction + overtimePay).coerceAtLeast(0.0)
-
         return SalaryPayrollModel(
             employeeUid = employeeUid,
             employeeName = employeeName,
@@ -187,19 +176,12 @@ class SalaryRepository(
         )
     }
 
-    private suspend fun getAttendanceForUser(employeeUid: String): List<AttendanceRecord> {
-        return attendanceCollection
-            .whereEqualTo("uid", employeeUid)
-            .get()
-            .await()
+    private suspend fun getAttendanceForUser(employeeUid: String): List<AttendanceRecord> =
+        attendanceCollection.whereEqualTo("uid", employeeUid).get().await()
             .toObjects(AttendanceRecord::class.java)
-    }
+            .filter { it.date.isNotBlank() }
 
-    private suspend fun getLeaveRequestsForUser(employeeUid: String): List<LeaveRequestModel> {
-        return leaveCollection
-            .whereEqualTo("userUid", employeeUid)
-            .get()
-            .await()
+    private suspend fun getLeaveRequestsForUser(employeeUid: String): List<LeaveRequestModel> =
+        leaveCollection.whereEqualTo("userUid", employeeUid).get().await()
             .toObjects(LeaveRequestModel::class.java)
-    }
 }
