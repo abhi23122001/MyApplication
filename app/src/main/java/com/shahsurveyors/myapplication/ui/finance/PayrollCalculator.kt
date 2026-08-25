@@ -13,8 +13,8 @@ import java.time.YearMonth
  * Monthly employees are paid their configured monthly salary less absence
  * deductions, while daily employees are paid only for worked days. Approved
  * leave is paid for monthly employees. Overtime is added for both types.
- * Late/early/missing-punch metrics are kept visible but are not silently
- * deducted because the company has not configured a deduction rule for them.
+ * Late/early/missing-punch metrics remain visible but are not silently
+ * deducted because no company deduction rule has been configured yet.
  */
 class PayrollCalculator(
     private val userRepository: UserRepository = UserRepository(),
@@ -34,20 +34,16 @@ class PayrollCalculator(
         userRepository.getAllEmployees().forEach { user ->
             val profile = salaryRepository.getHistory(user.uid)
                 .filter { it.effectiveFrom.isNotBlank() }
-                .firstOrNull {
-                    it.effectiveFrom <= end &&
-                        (it.effectiveTo == null || it.effectiveTo!! > start)
-                } ?: return@forEach
+                .firstOrNull { it.effectiveFrom <= end && (it.effectiveTo == null || it.effectiveTo!! > start) }
+                ?: return@forEach
 
             val attendance = attendanceRepository.getAttendanceForMonth(user.uid, start, end)
-            val leaveRequests = leaveRepository.getRequestsForUser(user.uid)
-            val approvedLeaveDates = expandApprovedLeaveDates(leaveRequests, monthStart, monthEnd)
+            val approvedLeaveDates = expandApprovedLeaveDates(leaveRepository.getRequestsForUser(user.uid), monthStart, monthEnd)
             val attendanceLeaveDates = attendance
                 .filter { it.status == "APPROVED_LEAVE" }
                 .mapNotNull { runCatching { LocalDate.parse(it.date) }.getOrNull() }
                 .filter(::isWorkingDay)
                 .toSet()
-            val paidLeaveDates = approvedLeaveDates + attendanceLeaveDates
 
             val presentDates = attendance
                 .filter { it.status != "APPROVED_LEAVE" && it.punchInTime != null }
@@ -55,6 +51,8 @@ class PayrollCalculator(
                 .filter(::isWorkingDay)
                 .toSet()
 
+            // A date can never be both present and paid leave for payroll purposes.
+            val paidLeaveDates = (approvedLeaveDates + attendanceLeaveDates) - presentDates
             val presentDays = presentDates.size
             val leaveDays = paidLeaveDates.size
             val absentDays = (scheduledWorkingDays - presentDays - leaveDays).coerceAtLeast(0)
@@ -64,16 +62,10 @@ class PayrollCalculator(
             val overtimeMinutes = attendance.sumOf { it.overtimeMinutes.coerceAtLeast(0) }
             val overtimePay = overtimeMinutes / 60.0 * profile.overtimeRatePerHour
 
-            val basePay = if (profile.payType == "DAILY") {
-                presentDays * profile.dailyRate
-            } else {
-                profile.monthlySalary
-            }
+            val basePay = if (profile.payType == "DAILY") presentDays * profile.dailyRate else profile.monthlySalary
             val absenceDeduction = if (profile.payType == "MONTHLY" && scheduledWorkingDays > 0) {
                 profile.monthlySalary / scheduledWorkingDays * absentDays
-            } else {
-                0.0
-            }
+            } else 0.0
             val net = (basePay - absenceDeduction + overtimePay).coerceAtLeast(0.0)
 
             result += SalaryData(
@@ -98,7 +90,6 @@ class PayrollCalculator(
                 status = "PENDING"
             )
         }
-
         return result.sortedBy { it.name.lowercase() }
     }
 
