@@ -87,11 +87,7 @@ class AdminViewModel(
                 val expenses = expenseRepository.getAllExpenses()
                 pendingExpenses = expenses.filter { it.status == "PENDING" }
 
-                // Attendance is loaded directly from today's attendance
-                // collection so valid records are never hidden by a user-role
-                // mismatch in the employee query.
                 loadTodayAttendance()
-
             } catch (e: Exception) {
                 e.printStackTrace()
                 errorMessage = e.localizedMessage ?: "Unable to load admin data"
@@ -101,12 +97,6 @@ class AdminViewModel(
         }
     }
 
-    /**
-     * Firestore attendance is the source of truth for today's attendance.
-     * If a punched user is missing from the employee-role query, add a small
-     * synthetic active profile for statistics only. This keeps Admin totals
-     * truthful without changing the users collection.
-     */
     private suspend fun loadTodayAttendance() {
         val attendanceList = try {
             attendanceRepository.getTodayAllAttendance()
@@ -165,14 +155,21 @@ class AdminViewModel(
     fun approveUser(uid: String, access: String) {
         viewModelScope.launch {
             try {
-                userRepository.updateUserStatus(
-                    uid = uid,
-                    approved = true,
-                    active = true
-                )
+                userRepository.updateUserStatus(uid = uid, approved = true, active = true)
                 fetchAdminData()
             } catch (e: Exception) {
                 errorMessage = e.localizedMessage ?: "Unable to approve user"
+            }
+        }
+    }
+
+    fun setEmployeeActive(uid: String, active: Boolean) {
+        viewModelScope.launch {
+            try {
+                userRepository.updateUserStatus(uid = uid, approved = true, active = active)
+                fetchAdminData()
+            } catch (e: Exception) {
+                errorMessage = e.localizedMessage ?: "Unable to update employee status"
             }
         }
     }
