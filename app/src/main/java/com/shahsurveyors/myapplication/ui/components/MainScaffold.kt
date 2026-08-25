@@ -10,52 +10,29 @@ import androidx.compose.material.icons.filled.PunchClock
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.shahsurveyors.myapplication.ui.theme.ShahGreen
+import com.shahsurveyors.myapplication.ui.theme.ShahLightGreen
+import com.shahsurveyors.myapplication.ui.theme.ShahMediumGrey
+import com.shahsurveyors.myapplication.ui.theme.ShahWhite
 
 sealed class BottomNavItem(
     val route: String,
     val icon: ImageVector,
     val label: String
 ) {
-
-    data object Home :
-        BottomNavItem(
-            route = "dashboard",
-            icon = Icons.Default.Dashboard,
-            label = "HOME"
-        )
-
-    data object Attendance :
-        BottomNavItem(
-            route = "attendance",
-            icon = Icons.Default.PunchClock,
-            label = "ATTENDANCE"
-        )
-
-    data object Employees :
-        BottomNavItem(
-            route = "employees",
-            icon = Icons.Default.Groups,
-            label = "EMPLOYEES"
-        )
-
-    data object Chat :
-        BottomNavItem(
-            route = "chat",
-            icon = Icons.Default.Chat,
-            label = "CHAT"
-        )
-
-    data object More :
-        BottomNavItem(
-            route = "more",
-            icon = Icons.Default.MoreHoriz,
-            label = "MORE"
-        )
+    data object Home : BottomNavItem("dashboard", Icons.Default.Dashboard, "Home")
+    data object Attendance : BottomNavItem("attendance", Icons.Default.PunchClock, "Attendance")
+    data object Employees : BottomNavItem("employees", Icons.Default.Groups, "Employees")
+    data object Chat : BottomNavItem("chat", Icons.Default.Chat, "Chat")
+    data object More : BottomNavItem("more", Icons.Default.MoreHoriz, "More")
 }
 
 @Composable
@@ -64,7 +41,6 @@ fun MainScaffold(
     onNavigate: (String) -> Unit,
     content: @Composable (Modifier) -> Unit
 ) {
-
     val items = listOf(
         BottomNavItem.Home,
         BottomNavItem.Attendance,
@@ -74,64 +50,50 @@ fun MainScaffold(
     )
 
     Scaffold(
-
         bottomBar = {
-
             if (shouldShowBottomBar(currentRoute)) {
-
-                NavigationBar {
-
+                NavigationBar(
+                    containerColor = ShahWhite,
+                    tonalElevation = 3.dp
+                ) {
                     items.forEach { item ->
+                        val selected = currentRoute == item.route
 
                         NavigationBarItem(
-
-                            selected =
-                                currentRoute == item.route,
-
+                            selected = selected,
                             onClick = {
-                                if (
-                                    currentRoute !=
-                                    item.route
-                                ) {
-                                    onNavigate(item.route)
-                                }
+                                if (!selected) onNavigate(item.route)
                             },
-
                             icon = {
-
                                 Icon(
                                     imageVector = item.icon,
-                                    contentDescription =
-                                        item.label
+                                    contentDescription = item.label
                                 )
                             },
-
                             label = {
-
                                 Text(
-                                    text = item.label
+                                    text = item.label,
+                                    fontSize = 10.sp
                                 )
-                            }
+                            },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = ShahGreen,
+                                selectedTextColor = ShahGreen,
+                                indicatorColor = ShahLightGreen,
+                                unselectedIconColor = ShahMediumGrey,
+                                unselectedTextColor = ShahMediumGrey
+                            )
                         )
                     }
                 }
             }
         }
-
     ) { paddingValues ->
-
-        content(
-            Modifier.padding(
-                paddingValues
-            )
-        )
+        content(Modifier.padding(paddingValues))
     }
 }
 
-private fun shouldShowBottomBar(
-    route: String?
-): Boolean {
-
+private fun shouldShowBottomBar(route: String?): Boolean {
     return route in setOf(
         BottomNavItem.Home.route,
         BottomNavItem.Attendance.route,
