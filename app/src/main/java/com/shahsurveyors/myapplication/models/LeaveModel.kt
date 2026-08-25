@@ -12,6 +12,7 @@ data class LeaveRequestModel(
     val reason: String = "",
     val status: String = "PENDING",
     val approvedBy: String = "",
+    val adminRemark: String = "",
     val createdAt: Timestamp? = null,
     val updatedAt: Timestamp? = null
 )
