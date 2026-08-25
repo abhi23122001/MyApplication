@@ -24,6 +24,8 @@ private val LightColorScheme = lightColorScheme(
     onSurface = ShahBlack,
     surfaceVariant = ShahLightGrey,
     onSurfaceVariant = ShahDarkGrey,
+    outline = ShahMediumGrey,
+    outlineVariant = ShahLightGrey,
     error = ErrorRed,
     onError = ShahWhite
 )
@@ -43,6 +45,8 @@ private val DarkColorScheme = darkColorScheme(
     onSurface = ShahWhite,
     surfaceVariant = ShahDarkGrey,
     onSurfaceVariant = ShahLightGrey,
+    outline = ShahMediumGrey,
+    outlineVariant = ShahDarkGrey,
     error = ErrorRed,
     onError = ShahWhite
 )
