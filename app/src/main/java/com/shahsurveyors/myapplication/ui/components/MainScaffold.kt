@@ -1,5 +1,6 @@
 package com.shahsurveyors.myapplication.ui.components
 
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -13,9 +14,11 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.shahsurveyors.myapplication.ui.theme.ShahGreen
@@ -25,7 +28,7 @@ import com.shahsurveyors.myapplication.ui.theme.ShahWhite
 
 sealed class BottomNavItem(
     val route: String,
-    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val icon: ImageVector,
     val label: String
 ) {
     data object Home : BottomNavItem("dashboard", Icons.Default.Dashboard, "Home")
@@ -41,64 +44,46 @@ fun MainScaffold(
     onNavigate: (String) -> Unit,
     content: @Composable (Modifier) -> Unit
 ) {
-    val items = listOf(
-        BottomNavItem.Home,
-        BottomNavItem.Attendance,
-        BottomNavItem.Employees,
-        BottomNavItem.Chat,
-        BottomNavItem.More
-    )
+    val items = listOf(BottomNavItem.Home, BottomNavItem.Attendance, BottomNavItem.Employees, BottomNavItem.Chat, BottomNavItem.More)
 
     Scaffold(
         bottomBar = {
             if (shouldShowBottomBar(currentRoute)) {
-                NavigationBar(
-                    containerColor = ShahWhite,
-                    tonalElevation = 6.dp,
-                    modifier = Modifier
+                Surface(
+                    modifier = Modifier.navigationBarsPadding(),
+                    color = ShahWhite,
+                    shadowElevation = 10.dp,
+                    shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)
                 ) {
-                    items.forEach { item ->
-                        val selected = currentRoute == item.route
-
-                        NavigationBarItem(
-                            selected = selected,
-                            onClick = { if (!selected) onNavigate(item.route) },
-                            icon = {
-                                Icon(
-                                    imageVector = item.icon,
-                                    contentDescription = item.label
+                    NavigationBar(containerColor = ShahWhite, tonalElevation = 0.dp) {
+                        items.forEach { item ->
+                            val selected = currentRoute == item.route
+                            NavigationBarItem(
+                                selected = selected,
+                                onClick = { if (!selected) onNavigate(item.route) },
+                                icon = { Icon(item.icon, contentDescription = item.label) },
+                                label = { Text(item.label, fontSize = 10.sp) },
+                                alwaysShowLabel = true,
+                                colors = NavigationBarItemDefaults.colors(
+                                    selectedIconColor = ShahGreen,
+                                    selectedTextColor = ShahGreen,
+                                    indicatorColor = ShahLightGreen.copy(alpha = 0.75f),
+                                    unselectedIconColor = ShahMediumGrey,
+                                    unselectedTextColor = ShahMediumGrey
                                 )
-                            },
-                            label = {
-                                Text(
-                                    text = item.label,
-                                    fontSize = 10.sp
-                                )
-                            },
-                            alwaysShowLabel = true,
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = ShahGreen,
-                                selectedTextColor = ShahGreen,
-                                indicatorColor = ShahLightGreen,
-                                unselectedIconColor = ShahMediumGrey,
-                                unselectedTextColor = ShahMediumGrey
                             )
-                        )
+                        }
                     }
                 }
             }
         }
-    ) { paddingValues ->
-        content(Modifier.padding(paddingValues))
-    }
+    ) { paddingValues -> content(Modifier.padding(paddingValues)) }
 }
 
-private fun shouldShowBottomBar(route: String?): Boolean {
-    return route in setOf(
-        BottomNavItem.Home.route,
-        BottomNavItem.Attendance.route,
-        BottomNavItem.Employees.route,
-        BottomNavItem.Chat.route,
-        BottomNavItem.More.route
-    )
-}
+private fun shouldShowBottomBar(route: String?): Boolean = route in setOf(
+    BottomNavItem.Home.route,
+    BottomNavItem.Attendance.route,
+    BottomNavItem.Employees.route,
+    BottomNavItem.Chat.route,
+    BottomNavItem.More.route
+)
