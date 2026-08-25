@@ -35,6 +35,7 @@ import com.shahsurveyors.myapplication.ui.crm.*
 import com.shahsurveyors.myapplication.ui.dashboard.*
 import com.shahsurveyors.myapplication.ui.equipment.*
 import com.shahsurveyors.myapplication.ui.finance.*
+import com.shahsurveyors.myapplication.ui.leave.*
 import com.shahsurveyors.myapplication.ui.more.MoreModulesScreen
 import com.shahsurveyors.myapplication.ui.ops.*
 import com.shahsurveyors.myapplication.ui.splash.SplashScreen
@@ -78,6 +79,7 @@ class MainActivity : ComponentActivity() {
                     val dsrRepository = remember { DSRRepository(firestore) }
                     val taskRepository = remember { TaskRepository(firestore) }
                     val dashboardRepository = remember { DashboardRepository(firestore) }
+                    val leaveRepository = remember { LeaveRepository(firestore) }
                     val billingRepository = remember { BillingRepository(database.appDao()) }
 
                     // =====================================================
@@ -218,6 +220,16 @@ class MainActivity : ComponentActivity() {
                             composable("employees") {
                                 EmployeeManagementScreen(
                                     viewModel = adminViewModel,
+                                    onBack = { navController.popBackStack() }
+                                )
+                            }
+
+                            composable("leave") {
+                                LeaveManagementScreen(
+                                    repository = leaveRepository,
+                                    uid = authViewModel.currentUserUid ?: "",
+                                    userName = authViewModel.userName,
+                                    userRole = authViewModel.userRole,
                                     onBack = { navController.popBackStack() }
                                 )
                             }
