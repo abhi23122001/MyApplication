@@ -62,7 +62,7 @@ fun DashboardScreen(
     }
 
     val notificationCount = (if (viewModel.presentToday > 0) 1 else 0) +
-            (if (viewModel.noticeMessage.isNotBlank()) 1 else 0) + 1
+            (if (viewModel.noticeMessage.isNotBlank()) 1 else 0)
 
     Scaffold(
         topBar = {
@@ -71,7 +71,7 @@ fun DashboardScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Image(
                             painter = painterResource(id = R.drawable.app_logo),
-                            contentDescription = "Logo",
+                            contentDescription = "SHAH ERP",
                             modifier = Modifier.size(36.dp)
                         )
                         Spacer(Modifier.width(10.dp))
@@ -132,9 +132,7 @@ fun DashboardScreen(
 
             item { SummarySection(viewModel, isAdmin) }
 
-            item {
-                BroadcastSection(viewModel.noticeMessage.ifBlank { "No new admin announcements." })
-            }
+            item { BroadcastSection(viewModel.noticeMessage.ifBlank { "No new admin announcements." }) }
 
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
