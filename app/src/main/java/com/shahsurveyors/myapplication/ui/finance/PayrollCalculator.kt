@@ -21,7 +21,6 @@ class PayrollCalculator(
     private val attendanceRepository: AttendanceRepository = AttendanceRepository(),
     private val leaveRepository: LeaveRepository = LeaveRepository()
 ) {
-
     suspend fun calculate(month: YearMonth): List<SalaryData> {
         val monthStart = month.atDay(1)
         val monthEnd = month.atEndOfMonth()
@@ -38,9 +37,7 @@ class PayrollCalculator(
 
             fun profileFor(date: LocalDate): SalaryProfileModel? {
                 val value = date.toString()
-                return history.firstOrNull {
-                    it.effectiveFrom <= value && (it.effectiveTo == null || it.effectiveTo!! > value)
-                }
+                return history.firstOrNull { it.effectiveFrom <= value && (it.effectiveTo == null || it.effectiveTo!! > value) }
             }
 
             val attendance = attendanceRepository.getAttendanceForMonth(user.uid, start, end)
@@ -51,7 +48,6 @@ class PayrollCalculator(
                 .filter(::isWorkingDay)
                 .toSet()
             val paidLeaveDates = approvedLeaveDates + attendanceLeaveDates
-
             val presentDates = attendance
                 .filter { it.status != "APPROVED_LEAVE" && it.punchInTime != null }
                 .mapNotNull { runCatching { LocalDate.parse(it.date) }.getOrNull() }
@@ -69,19 +65,19 @@ class PayrollCalculator(
             while (!date.isAfter(monthEnd)) {
                 if (isWorkingDay(date)) {
                     val profile = profileFor(date)
-                    val payable = presentDates.contains(date) || paidLeaveDates.contains(date)
-                    if (profile != null && profile.payType == "MONTHLY") {
-                        val daySalary = profile.monthlySalary / scheduledWorkingDays.coerceAtLeast(1)
-                        monthlyGross += daySalary
-                        if (!payable) {
-                            absentDays++
-                            absenceDeduction += daySalary
+                    if (profile != null) {
+                        val payable = presentDates.contains(date) || paidLeaveDates.contains(date)
+                        if (profile.payType == "MONTHLY") {
+                            val daySalary = profile.monthlySalary / scheduledWorkingDays.coerceAtLeast(1)
+                            monthlyGross += daySalary
+                            if (!payable) {
+                                absentDays++
+                                absenceDeduction += daySalary
+                            }
+                        } else {
+                            if (presentDates.contains(date)) dailyGross += profile.dailyRate
+                            else if (!paidLeaveDates.contains(date)) absentDays++
                         }
-                    } else if (profile != null && profile.payType == "DAILY") {
-                        if (presentDates.contains(date)) dailyGross += profile.dailyRate
-                        else if (!paidLeaveDates.contains(date)) absentDays++
-                    } else if (!payable) {
-                        absentDays++
                     }
                 }
                 date = date.plusDays(1)
@@ -96,15 +92,8 @@ class PayrollCalculator(
             val lateCount = attendance.count { it.isLate && it.status != "APPROVED_LEAVE" }
             val earlyOutCount = attendance.count { it.isEarlyOut && it.status != "APPROVED_LEAVE" }
             val missingPunchOutCount = attendance.count { it.punchOutMissing }
-
             val latestProfile = history.firstOrNull { it.effectiveFrom <= end } ?: history.last()
-            val basePay = if (latestProfile.payType == "DAILY" && history.any { it.payType == "MONTHLY" }) {
-                monthlyGross + dailyGross
-            } else if (history.any { it.payType == "MONTHLY" }) {
-                monthlyGross + dailyGross
-            } else {
-                dailyGross
-            }
+            val basePay = monthlyGross + dailyGross
             val net = (basePay - absenceDeduction + overtimePay).coerceAtLeast(0.0)
             val displayPayType = if (history.filter { it.effectiveFrom <= end }.map { it.payType }.distinct().size > 1) "MIXED" else latestProfile.payType
 
@@ -145,11 +134,7 @@ class PayrollCalculator(
 
     private fun isWorkingDay(date: LocalDate): Boolean = date.dayOfWeek != DayOfWeek.SUNDAY
 
-    private fun expandApprovedLeaveDates(
-        requests: List<LeaveRequestModel>,
-        monthStart: LocalDate,
-        monthEnd: LocalDate
-    ): Set<LocalDate> {
+    private fun expandApprovedLeaveDates(requests: List<LeaveRequestModel>, monthStart: LocalDate, monthEnd: LocalDate): Set<LocalDate> {
         val result = mutableSetOf<LocalDate>()
         requests.filter { it.status == "APPROVED" }.forEach { request ->
             val from = runCatching { LocalDate.parse(request.fromDate) }.getOrNull() ?: return@forEach
