@@ -30,7 +30,6 @@ fun AdminHubScreen(viewModel: AdminViewModel, onBack: () -> Unit, onNavigateToCo
     var selectedTab by remember { mutableIntStateOf(0) }
     LaunchedEffect(Unit) { viewModel.fetchAdminData() }
     val titles = listOf("Approvals", "Logins", "Expenses", "Attendance", "Settings")
-
     Scaffold(
         topBar = {
             TopAppBar(
@@ -42,16 +41,9 @@ fun AdminHubScreen(viewModel: AdminViewModel, onBack: () -> Unit, onNavigateToCo
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize().background(ShahGrey)) {
             ApprovalCenterCard(viewModel, onClick = { selectedTab = 0 })
-            ScrollableTabRow(
-                selectedTabIndex = selectedTab,
-                containerColor = ShahWhite,
-                contentColor = ShahGreen,
-                edgePadding = 8.dp,
-                indicator = { positions -> if (selectedTab < positions.size) TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(positions[selectedTab]), color = ShahGreen) }
-            ) {
-                titles.forEachIndexed { index, title ->
-                    Tab(selected = selectedTab == index, onClick = { selectedTab = index; if (index == 3) viewModel.refreshAttendance() }, text = { Text(title, fontWeight = FontWeight.Bold, fontSize = 11.sp) })
-                }
+            ScrollableTabRow(selectedTabIndex = selectedTab, containerColor = ShahWhite, contentColor = ShahGreen, edgePadding = 8.dp,
+                indicator = { positions -> if (selectedTab < positions.size) TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(positions[selectedTab]), color = ShahGreen) }) {
+                titles.forEachIndexed { index, title -> Tab(selected = selectedTab == index, onClick = { selectedTab = index; if (index == 3) viewModel.refreshAttendance() }, text = { Text(title, fontWeight = FontWeight.Bold, fontSize = 11.sp) }) }
             }
             when (selectedTab) {
                 0 -> UnifiedApprovalList(viewModel)
@@ -90,22 +82,12 @@ private fun UnifiedApprovalList(viewModel: AdminViewModel) {
         if (filter == "ALL" || filter == "ATTENDANCE") addAll(viewModel.pendingAttendanceCorrections.map { ApprovalRequestItem(it.id, ApprovalType.ATTENDANCE, it.employeeName, it.issueType.replace('_', ' '), "Date: ${it.attendanceDate}", date = it.attendanceDate, reason = it.reason, createdAt = it.createdAt) })
         if (filter == "ALL" || filter == "LEAVE") addAll(viewModel.pendingLeaves.map { ApprovalRequestItem(it.id, ApprovalType.LEAVE, it.employeeName, "${it.leaveType} Leave", "${it.fromDate} → ${it.toDate}", date = it.fromDate, reason = it.reason, createdAt = it.createdAt) })
         if (filter == "ALL" || filter == "EXPENSE") addAll(viewModel.pendingExpenses.map { ApprovalRequestItem(it.id, ApprovalType.EXPENSE, it.userName, it.category.ifBlank { "Expense Claim" }, it.projectName.ifBlank { it.description }, amount = it.amount, date = it.date?.let { d -> SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH).format(d.toDate()) } ?: "", reason = it.description) })
-        if (filter == "ALL" || filter == "SALARY") addAll(viewModel.pendingSalaryAdvances.map { ApprovalRequestItem(it.id, ApprovalType.SALARY_ADVANCE, it.employeeName, "Salary Advance", "Requested ₹${it.amount}", amount = it.amount, date = it.requestedDate, reason = it.reason, createdAt = it.createdAt) })
+        if (filter == "ALL" || filter == "SALARY") addAll(viewModel.pendingSalaryAdvances.map { ApprovalRequestItem(it.id, ApprovalType.SALARY_ADVANCE, it.userName, "Salary Advance", "Requested ₹${it.amount}", amount = it.amount, date = it.salaryMonth, reason = it.reason, createdAt = com.google.firebase.Timestamp(java.util.Date(it.requestedAt))) })
     }.sortedByDescending { it.createdAt?.seconds ?: 0L }
-
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            filters.forEach { value ->
-                FilterChip(selected = filter == value, onClick = { filter = value }, label = { Text(value, fontSize = 9.sp, fontWeight = FontWeight.Bold) })
-            }
-        }
-        if (items.isEmpty() && !viewModel.isLoading) {
-            EmptyAdminState(Icons.Default.TaskAlt, "No pending requests", "All approval requests are cleared.")
-            return
-        }
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            items(items, key = { "${it.type}_${it.id}" }) { request -> ApprovalRequestCard(request, viewModel) }
-        }
+        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) { filters.forEach { value -> FilterChip(selected = filter == value, onClick = { filter = value }, label = { Text(value, fontSize = 9.sp, fontWeight = FontWeight.Bold) }) } }
+        if (items.isEmpty() && !viewModel.isLoading) { EmptyAdminState(Icons.Default.TaskAlt, "No pending requests", "All approval requests are cleared."); return }
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) { items(items, key = { "${it.type}_${it.id}" }) { request -> ApprovalRequestCard(request, viewModel) } }
     }
 }
 
@@ -117,11 +99,7 @@ private fun ApprovalRequestCard(request: ApprovalRequestItem, viewModel: AdminVi
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(shape = RoundedCornerShape(10.dp), color = ShahGreen.copy(.10f)) { Icon(icon, null, tint = ShahGreen, modifier = Modifier.padding(8.dp).size(24.dp)) }
                 Spacer(Modifier.width(10.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(request.employeeName, fontWeight = FontWeight.Bold, color = ShahBlack)
-                    Text(request.title, fontSize = 10.sp, color = ShahGreen, fontWeight = FontWeight.Bold)
-                    Text(request.subtitle, fontSize = 10.sp, color = ShahMediumGrey)
-                }
+                Column(Modifier.weight(1f)) { Text(request.employeeName, fontWeight = FontWeight.Bold, color = ShahBlack); Text(request.title, fontSize = 10.sp, color = ShahGreen, fontWeight = FontWeight.Bold); Text(request.subtitle, fontSize = 10.sp, color = ShahMediumGrey) }
                 if (request.amount != null) Text("₹${request.amount}", fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
             }
             if (request.reason.isNotBlank()) Text("Reason: ${request.reason}", fontSize = 10.sp, color = ShahMediumGrey, modifier = Modifier.padding(top = 9.dp))
