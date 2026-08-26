@@ -12,7 +12,12 @@ class SalaryViewModelFactory(
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(SalaryViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
-            return SalaryViewModel(userRepository, salaryRepository) as T
+            return SalaryViewModel(
+                PayrollCalculator(
+                    userRepository = userRepository,
+                    salaryRepository = salaryRepository
+                )
+            ) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
