@@ -70,6 +70,7 @@ class MainActivity : ComponentActivity() {
                     val leaveRepository = remember { LeaveRepository(firestore) }
                     val billingRepository = remember { BillingRepository(database.appDao()) }
                     val salaryRepository = remember { SalaryRepository(firestore) }
+                    val advanceSalaryRepository = remember { AdvanceSalaryRepository(firestore) }
 
                     val authViewModel: AuthViewModel = viewModel(factory = AuthViewModelFactory(authRepository, userRepository, sessionManager))
                     val dashboardViewModel: DashboardViewModel = viewModel(factory = DashboardViewModelFactory(dashboardRepository))
@@ -135,6 +136,7 @@ class MainActivity : ComponentActivity() {
                             }
                             composable("employees") { EmployeeManagementScreen(viewModel = adminViewModel, onBack = { navController.popBackStack() }) }
                             composable("leave") { LeaveManagementScreen(repository = leaveRepository, uid = authViewModel.currentUserUid ?: "", userName = authViewModel.userName, userRole = authViewModel.userRole, onBack = { navController.popBackStack() }) }
+                            composable("advance_salary") { AdvanceSalaryScreen(repository = advanceSalaryRepository, uid = authViewModel.currentUserUid ?: "", userName = authViewModel.userName, onBack = { navController.popBackStack() }) }
                             composable("chat") { RadarScreen(onBack = { navController.popBackStack() }) }
                             composable("more") { MoreModulesScreen(onNavigate = { route -> navController.navigate(route) }) }
                             composable("equipment") { EquipmentTrackerScreen(viewModel = equipmentViewModel, onBack = { navController.popBackStack() }) }
