@@ -102,7 +102,7 @@ class PayrollCalculator(
             val advanceDeduction = approvedAdvances.sumOf { advance ->
                 val firstMonth = runCatching { YearMonth.parse(advance.salaryMonth) }.getOrNull()
                     ?: return@sumOf 0.0
-                val monthIndex = firstMonth.until(month).toTotalMonths().toInt()
+                val monthIndex = (month.year - firstMonth.year) * 12 + (month.monthValue - firstMonth.monthValue)
                 if (monthIndex in 0 until advance.installments) {
                     advance.approvedAmount / advance.installments
                 } else 0.0
