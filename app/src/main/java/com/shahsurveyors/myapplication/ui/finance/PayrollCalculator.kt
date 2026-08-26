@@ -1,5 +1,6 @@
 package com.shahsurveyors.myapplication.ui.finance
 
+import com.shahsurveyors.myapplication.data.AdvanceSalaryRepository
 import com.shahsurveyors.myapplication.data.AttendanceRepository
 import com.shahsurveyors.myapplication.data.LeaveRepository
 import com.shahsurveyors.myapplication.data.SalaryRepository
@@ -19,7 +20,8 @@ class PayrollCalculator(
     private val userRepository: UserRepository = UserRepository(),
     private val salaryRepository: SalaryRepository = SalaryRepository(),
     private val attendanceRepository: AttendanceRepository = AttendanceRepository(),
-    private val leaveRepository: LeaveRepository = LeaveRepository()
+    private val leaveRepository: LeaveRepository = LeaveRepository(),
+    private val advanceSalaryRepository: AdvanceSalaryRepository = AdvanceSalaryRepository()
 ) {
     suspend fun calculate(month: YearMonth): List<SalaryData> {
         val monthStart = month.atDay(1)
@@ -92,9 +94,24 @@ class PayrollCalculator(
             val lateCount = attendance.count { it.isLate && it.status != "APPROVED_LEAVE" }
             val earlyOutCount = attendance.count { it.isEarlyOut && it.status != "APPROVED_LEAVE" }
             val missingPunchOutCount = attendance.count { it.punchOutMissing }
+
+            // Only APPROVED advances are deducted. Each approved request starts
+            // its installment schedule from the requested salary month.
+            val approvedAdvances = advanceSalaryRepository.getForUser(user.uid)
+                .filter { it.status == "APPROVED" && it.approvedAmount > 0.0 && it.installments > 0 }
+            val advanceDeduction = approvedAdvances.sumOf { advance ->
+                val firstMonth = runCatching { YearMonth.parse(advance.salaryMonth) }.getOrNull()
+                    ?: return@sumOf 0.0
+                val monthIndex = firstMonth.until(month).toTotalMonths().toInt()
+                if (monthIndex in 0 until advance.installments) {
+                    advance.approvedAmount / advance.installments
+                } else 0.0
+            }
+
             val latestProfile = history.firstOrNull { it.effectiveFrom <= end } ?: history.last()
             val basePay = monthlyGross + dailyGross
-            val net = (basePay - absenceDeduction + overtimePay).coerceAtLeast(0.0)
+            val totalDeductions = absenceDeduction + advanceDeduction
+            val net = (basePay - totalDeductions + overtimePay).coerceAtLeast(0.0)
             val displayPayType = if (history.filter { it.effectiveFrom <= end }.map { it.payType }.distinct().size > 1) "MIXED" else latestProfile.payType
 
             result += SalaryData(
@@ -109,8 +126,8 @@ class PayrollCalculator(
                 missingPunchOutCount = missingPunchOutCount,
                 overtimeMinutes = overtimeMinutes,
                 overtimePay = overtimePay,
-                advances = 0.0,
-                deductions = absenceDeduction,
+                advances = advanceDeduction,
+                deductions = totalDeductions,
                 basicSalary = basePay,
                 netSalary = net,
                 month = month.toString(),
