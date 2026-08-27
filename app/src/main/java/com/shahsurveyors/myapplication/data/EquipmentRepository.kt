@@ -17,7 +17,19 @@ class EquipmentRepository(private val firestore: FirebaseFirestore = FirebaseFir
     suspend fun saveEquipment(equipment: EquipmentModel) { val id=equipment.id.ifBlank{equipmentCollection.document().id}; equipmentCollection.document(id).set(equipment.copy(id=id)).await() }
     suspend fun updateEquipmentStatus(id:String,status:String,uid:String?,name:String?) { equipmentCollection.document(id).update(mapOf("status" to status,"assignedToUid" to uid,"assignedToName" to name)).await() }
     suspend fun getActiveEmployees():List<UserProfile> = try { firestore.collection(FirebaseConstants.COLLECTION_USERS).whereEqualTo("active",true).whereEqualTo("approved",true).get().await().toObjects(UserProfile::class.java).filter{it.role.lowercase()!="admin"}.sortedBy{it.name.lowercase()} } catch(_:Exception){emptyList()}
-    suspend fun getActiveProjects():List<ProjectModel> = try { firestore.collection(FirebaseConstants.COLLECTION_PROJECTS).whereEqualTo("status","ACTIVE").get().await().toObjects(ProjectModel::class.java).sortedBy{it.name.lowercase()} } catch(_:Exception){emptyList()}
+
+    suspend fun getActiveProjects():List<ProjectModel> = try {
+        firestore.collection(FirebaseConstants.COLLECTION_PROJECTS).get().await()
+            .toObjects(ProjectModel::class.java)
+            .filter { statusIsActive(it.status) }
+            .sortedBy { it.name.lowercase() }
+    } catch(_:Exception){emptyList()}
+
+    private fun statusIsActive(status:String):Boolean = when(status.trim().uppercase()) {
+        "ACTIVE", "STARTED", "IN_PROGRESS", "ONGOING" -> true
+        else -> false
+    }
+
     suspend fun getHandoverHistory(equipmentId:String):List<EquipmentHandoverRecord> = try { historyCollection.whereEqualTo("equipmentId",equipmentId).get().await().documents.map{d->EquipmentHandoverRecord(id=d.id,equipmentId=d.getString("equipmentId")?:"",equipmentName=d.getString("equipmentName")?:"",action=d.getString("action")?:"",employeeUid=d.getString("employeeUid")?:"",employeeName=d.getString("employeeName")?:"",projectId=d.getString("projectId")?:"",projectName=d.getString("projectName")?:"",location=d.getString("location")?:"",accessories=(d.get("accessories") as? List<*>)?.filterIsInstance<String>()?:emptyList(),remarks=d.getString("remarks")?:"",actionAt=d.getTimestamp("actionAt")?:d.getTimestamp("timestamp"),actionByUid=d.getString("actionByUid")?:d.getString("performedByUid")?:"",actionByName=d.getString("actionByName")?:d.getString("performedByName")?:"" )}.sortedByDescending{it.actionAt?.toDate()?.time?:0L} } catch(_:Exception){emptyList()}
 
     suspend fun saveHandover(id:String,employee:UserProfile,project:ProjectModel,location:String,accessories:List<String>,handoverByUid:String,handoverByName:String) {
