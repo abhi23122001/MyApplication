@@ -20,235 +20,26 @@ import java.util.Date
 import java.util.Locale
 
 object BillingDocumentGenerator {
-
-    data class DocumentData(
-        val company: CompanyProfile,
-        val bank: BankDetails,
-        val clientName: String,
-        val clientAddress: String,
-        val clientGstin: String?,
-        val docType: DocType,
-        val docNumber: String,
-        val date: Long = System.currentTimeMillis(),
-        val gstType: String,
-        val gstPercentage: Double = 18.0,
-        val items: List<BillingItemEntity>,
-        val terms: List<String>
-    )
-
-    fun generatePdf(context: Context, data: DocumentData): File {
-        val pdfDocument = PdfDocument()
-        val pageInfo = PdfDocument.PageInfo.Builder(595, 842, 1).create()
-        val page = pdfDocument.startPage(pageInfo)
-        val canvas = page.canvas
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.BLACK
-            textSize = 10f
-            typeface = Typeface.DEFAULT
-        }
-
-        drawHeader(canvas, context, data.company)
-
-        paint.color = Color.BLACK
-        paint.textSize = 14f
-        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        paint.textAlign = Paint.Align.CENTER
-
-        val title = when (data.docType) {
-            DocType.TAX_INVOICE -> "TAX INVOICE"
-            DocType.NON_GST_BILL -> "BILL"
-            DocType.QUOTATION -> "QUOTATION"
-        }
-        canvas.drawText(title, 297f, 160f, paint)
-        paint.textAlign = Paint.Align.LEFT
-
-        val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-        paint.textSize = 10f
-        paint.typeface = Typeface.DEFAULT
-        canvas.drawText("Date: ${sdf.format(Date(data.date))}", 430f, 185f, paint)
-        canvas.drawText("No: ${data.docNumber}", 430f, 200f, paint)
-
-        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        canvas.drawText("TO:", 40f, 185f, paint)
-        paint.typeface = Typeface.DEFAULT
-        canvas.drawText(data.clientName, 40f, 200f, paint)
-        canvas.drawText(data.clientAddress, 40f, 215f, paint)
-        data.clientGstin?.takeIf { it.isNotBlank() }?.let {
-            canvas.drawText("GSTIN: $it", 40f, 230f, paint)
-        }
-
-        if (data.docType == DocType.QUOTATION) {
-            canvas.drawText("Dear Sir,", 40f, 260f, paint)
-            canvas.drawText(
-                "We thank you for the enquiry and are pleased to offer our prices for your kind consideration.",
-                40f, 275f, paint
-            )
-        }
-
-        val startY = 300f
-        drawTable(canvas, data.items, startY)
-        val tableBottom = startY + 25f + (data.items.size * 20f) + 20f
-        val subTotal = data.items.sumOf { it.amount }
-        var total = subTotal
-        var calcY = tableBottom + 20f
-
-        if (data.docType != DocType.NON_GST_BILL) {
-            val gstRate = data.gstPercentage / 100.0
-            if (data.gstType == "IGST") {
-                val igst = subTotal * gstRate
-                canvas.drawText("IGST (${data.gstPercentage}%):", 380f, calcY, textPaint)
-                canvas.drawText(formatCurrency(igst), 480f, calcY, textPaint)
-                total += igst
-                calcY += 15f
-            } else {
-                val cgst = subTotal * (gstRate / 2)
-                val sgst = subTotal * (gstRate / 2)
-                canvas.drawText("CGST (${data.gstPercentage / 2}%):", 380f, calcY, textPaint)
-                canvas.drawText(formatCurrency(cgst), 480f, calcY, textPaint)
-                calcY += 15f
-                canvas.drawText("SGST (${data.gstPercentage / 2}%):", 380f, calcY, textPaint)
-                canvas.drawText(formatCurrency(sgst), 480f, calcY, textPaint)
-                total += cgst + sgst
-                calcY += 15f
-            }
-        }
-
-        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        canvas.drawText("GRAND TOTAL:", 380f, calcY + 5f, paint)
-        canvas.drawText(formatCurrency(total), 480f, calcY + 5f, paint)
-
-        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
-        canvas.drawText("Amount in words: ${NumberToWords.convert(total)}", 40f, calcY + 25f, paint)
-
-        calcY += 60f
-        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        canvas.drawText("TERMS & CONDITIONS:", 40f, calcY, paint)
-        paint.typeface = Typeface.DEFAULT
-        var termY = calcY + 15f
-        data.terms.forEachIndexed { index, term ->
-            canvas.drawText("${index + 1}. $term", 50f, termY, paint)
-            termY += 15f
-        }
-
-        val bankY = 700f
-        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        canvas.drawText("BANK DETAILS:", 40f, bankY, paint)
-        paint.typeface = Typeface.DEFAULT
-        canvas.drawText("Bank: ${data.bank.bankName}", 40f, bankY + 15f, paint)
-        canvas.drawText("A/C No: ${data.bank.accountNumber}", 40f, bankY + 30f, paint)
-        canvas.drawText("IFSC: ${data.bank.ifscCode} | Branch: ${data.bank.branchAddress}", 40f, bankY + 45f, paint)
-
-        drawBranding(canvas, context, data.company)
-
-        paint.textAlign = Paint.Align.CENTER
-        paint.textSize = 8f
-        paint.typeface = Typeface.DEFAULT
-        canvas.drawText(data.company.footerText, 297f, 830f, paint)
-        paint.textAlign = Paint.Align.LEFT
-
-        pdfDocument.finishPage(page)
-        val fileName = "SSC_${title.replace(" ", "_")}_${System.currentTimeMillis()}.pdf"
-        val file = File(context.cacheDir, fileName)
-        FileOutputStream(file).use { pdfDocument.writeTo(it) }
-        pdfDocument.close()
-        return file
+    data class DocumentData(val company: CompanyProfile,val bank: BankDetails,val clientName:String,val clientAddress:String,val clientGstin:String?,val docType:DocType,val docNumber:String,val date:Long=System.currentTimeMillis(),val gstType:String,val gstPercentage:Double=18.0,val items:List<BillingItemEntity>,val terms:List<String>)
+    fun generatePdf(context:Context,data:DocumentData):File{
+        val pdf=PdfDocument();val page=pdf.startPage(PdfDocument.PageInfo.Builder(595,842,1).create());val c=page.canvas
+        val p=Paint(Paint.ANTI_ALIAS_FLAG);val tp=Paint(Paint.ANTI_ALIAS_FLAG).apply{color=Color.BLACK;textSize=10f;typeface=Typeface.DEFAULT}
+        drawHeader(c,context,data.company);p.color=Color.BLACK;p.textSize=14f;p.typeface=Typeface.create(Typeface.DEFAULT,Typeface.BOLD);p.textAlign=Paint.Align.CENTER
+        val title=when(data.docType){DocType.TAX_INVOICE->"TAX INVOICE";DocType.NON_GST_BILL->"BILL";DocType.QUOTATION->"QUOTATION"};c.drawText(title,297f,160f,p);p.textAlign=Paint.Align.LEFT
+        val sdf=SimpleDateFormat("dd/MM/yyyy",Locale.getDefault());p.textSize=10f;p.typeface=Typeface.DEFAULT;c.drawText("Date: ${sdf.format(Date(data.date))}",430f,185f,p);c.drawText("No: ${data.docNumber}",430f,200f,p)
+        p.typeface=Typeface.create(Typeface.DEFAULT,Typeface.BOLD);c.drawText("TO:",40f,185f,p);p.typeface=Typeface.DEFAULT;c.drawText(data.clientName,40f,200f,p);c.drawText(data.clientAddress,40f,215f,p);data.clientGstin?.takeIf{it.isNotBlank()}?.let{c.drawText("GSTIN: $it",40f,230f,p)}
+        if(data.docType==DocType.QUOTATION){c.drawText("Dear Sir,",40f,260f,p);c.drawText("We thank you for the enquiry and are pleased to offer our prices for your kind consideration.",40f,275f,p)}
+        val startY=300f;drawTable(c,data.items,startY);val sub=data.items.sumOf{it.amount};var total=sub;var y=startY+25f+data.items.size*20f+40f
+        if(data.docType!=DocType.NON_GST_BILL){val rate=data.gstPercentage/100.0;if(data.gstType=="IGST"){val gst=sub*rate;c.drawText("IGST (${data.gstPercentage}%):",380f,y,tp);c.drawText(formatCurrency(gst),480f,y,tp);total+=gst;y+=15f}else{val cgst=sub*(rate/2);val sgst=sub*(rate/2);c.drawText("CGST (${data.gstPercentage/2}%):",380f,y,tp);c.drawText(formatCurrency(cgst),480f,y,tp);y+=15f;c.drawText("SGST (${data.gstPercentage/2}%):",380f,y,tp);c.drawText(formatCurrency(sgst),480f,y,tp);total+=cgst+sgst;y+=15f}}
+        p.typeface=Typeface.create(Typeface.DEFAULT,Typeface.BOLD);c.drawText("GRAND TOTAL:",380f,y+5f,p);c.drawText(formatCurrency(total),480f,y+5f,p);p.typeface=Typeface.create(Typeface.DEFAULT,Typeface.ITALIC);c.drawText("Amount in words: ${NumberToWords.convert(total)}",40f,y+25f,p)
+        y+=60f;p.typeface=Typeface.create(Typeface.DEFAULT,Typeface.BOLD);c.drawText("TERMS & CONDITIONS:",40f,y,p);p.typeface=Typeface.DEFAULT;var ty=y+15f;data.terms.forEachIndexed{i,t->c.drawText("${i+1}. $t",50f,ty,p);ty+=15f}
+        val by=700f;p.typeface=Typeface.create(Typeface.DEFAULT,Typeface.BOLD);c.drawText("BANK DETAILS:",40f,by,p);p.typeface=Typeface.DEFAULT;c.drawText("Bank: ${data.bank.bankName}",40f,by+15f,p);c.drawText("A/C No: ${data.bank.accountNumber}",40f,by+30f,p);c.drawText("IFSC: ${data.bank.ifscCode} | Branch: ${data.bank.branchAddress}",40f,by+45f,p)
+        drawBranding(c,context,data.company);p.textAlign=Paint.Align.CENTER;p.textSize=8f;p.typeface=Typeface.DEFAULT;c.drawText(data.company.footerText,297f,830f,p);p.textAlign=Paint.Align.LEFT
+        pdf.finishPage(page);val file=File(context.cacheDir,"SSC_${title.replace(" ","_")}_${System.currentTimeMillis()}.pdf");FileOutputStream(file).use{pdf.writeTo(it)};pdf.close();return file
     }
-
-    private fun drawHeader(canvas: Canvas, context: Context, company: CompanyProfile) {
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-
-        // Official app logo: always use app_logo.png for exported PDFs.
-        loadDrawableBitmap(context, R.drawable.app_logo)?.let { bitmap ->
-            val size = 80
-            val scaled = Bitmap.createScaledBitmap(bitmap, size, size, true)
-            canvas.drawBitmap(scaled, 40f, 40f, paint)
-            if (scaled !== bitmap) scaled.recycle()
-        }
-
-        paint.textAlign = Paint.Align.CENTER
-        paint.color = Color.BLACK
-        paint.textSize = 20f
-        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        canvas.drawText(company.name, 297f, 60f, paint)
-        paint.textSize = 9f
-        paint.typeface = Typeface.DEFAULT
-        canvas.drawText("ISO 9001:2015 CERTIFIED", 297f, 75f, paint)
-        canvas.drawText(company.address, 297f, 90f, paint)
-        canvas.drawText("Email: ${company.email} | Mobile: ${company.phone}", 297f, 105f, paint)
-        paint.strokeWidth = 1f
-        canvas.drawLine(40f, 120f, 555f, 120f, paint)
-        paint.textAlign = Paint.Align.LEFT
-    }
-
-    private fun drawTable(canvas: Canvas, items: List<BillingItemEntity>, startY: Float) {
-        val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = 1f
-            color = Color.BLACK
-        }
-        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.BLACK
-            textSize = 9f
-            typeface = Typeface.DEFAULT
-        }
-        val tableHeight = 25f + (items.size * 20f)
-        canvas.drawRect(40f, startY, 555f, startY + tableHeight, borderPaint)
-        canvas.drawLine(40f, startY + 25f, 555f, startY + 25f, borderPaint)
-        canvas.drawLine(80f, startY, 80f, startY + tableHeight, borderPaint)
-        canvas.drawLine(350f, startY, 350f, startY + tableHeight, borderPaint)
-        canvas.drawLine(400f, startY, 400f, startY + tableHeight, borderPaint)
-        canvas.drawLine(440f, startY, 440f, startY + tableHeight, borderPaint)
-        canvas.drawLine(490f, startY, 490f, startY + tableHeight, borderPaint)
-
-        textPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        canvas.drawText("S.No", 45f, startY + 17f, textPaint)
-        canvas.drawText("Description", 85f, startY + 17f, textPaint)
-        canvas.drawText("Unit", 355f, startY + 17f, textPaint)
-        canvas.drawText("Qty", 405f, startY + 17f, textPaint)
-        canvas.drawText("Rate", 445f, startY + 17f, textPaint)
-        canvas.drawText("Amount", 495f, startY + 17f, textPaint)
-
-        textPaint.typeface = Typeface.DEFAULT
-        var y = startY + 42f
-        items.forEachIndexed { index, item ->
-            canvas.drawText("${index + 1}", 50f, y, textPaint)
-            canvas.drawText(truncateText(item.description, 40), 85f, y, textPaint)
-            canvas.drawText(item.unit, 355f, y, textPaint)
-            canvas.drawText(formatNumber(item.qty), 405f, y, textPaint)
-            canvas.drawText(formatNumber(item.rate), 445f, y, textPaint)
-            canvas.drawText(formatNumber(item.amount), 495f, y, textPaint)
-            y += 20f
-        }
-    }
-
-    private fun drawBranding(canvas: Canvas, context: Context, company: CompanyProfile) {
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-
-        // Official combined seal + signature: always use seal_sign.png.
-        loadDrawableBitmap(context, R.drawable.seal_sign)?.let { bitmap ->
-            val scaled = Bitmap.createScaledBitmap(bitmap, 150, 150, true)
-            canvas.drawBitmap(scaled, 380f, 640f, paint)
-            if (scaled !== bitmap) scaled.recycle()
-        }
-
-        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.BLACK
-            textSize = 10f
-        }
-        canvas.drawText("For ${company.name}", 380f, 795f, textPaint)
-        textPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        canvas.drawText("Authorized Signatory", 420f, 810f, textPaint)
-    }
-
-    private fun loadDrawableBitmap(context: Context, resourceId: Int): Bitmap? = try {
-        BitmapFactory.decodeResource(context.resources, resourceId)
-    } catch (_: Exception) {
-        null
-    }
-
-    private fun formatCurrency(value: Double): String = "₹${String.format(Locale.US, "%.2f", value)}"
-    private fun formatNumber(value: Double): String = String.format(Locale.US, "%.2f", value)
-    private fun truncateText(text: String, maxLength: Int): String =
-        if (text.length <= maxLength) text else text.take(maxLength - 3) + "..."
+    private fun drawHeader(c:Canvas,context:Context,company:CompanyProfile){val p=Paint(Paint.ANTI_ALIAS_FLAG);loadDrawableBitmap(context,R.drawable.app_logo)?.let{b->val s=Bitmap.createScaledBitmap(b,80,80,true);c.drawBitmap(s,40f,40f,p);if(s!==b)s.recycle()};p.textAlign=Paint.Align.CENTER;p.color=Color.BLACK;p.textSize=20f;p.typeface=Typeface.create(Typeface.DEFAULT,Typeface.BOLD);c.drawText(company.name,297f,60f,p);p.textSize=9f;p.typeface=Typeface.DEFAULT;c.drawText("ISO 9001:2015 CERTIFIED",297f,75f,p);c.drawText(company.address,297f,90f,p);c.drawText("Email: ${company.email} | Mobile: ${company.phone}",297f,105f,p);c.drawLine(40f,120f,555f,120f,p);p.textAlign=Paint.Align.LEFT}
+    private fun drawTable(c:Canvas,items:List<BillingItemEntity>,startY:Float){val b=Paint(Paint.ANTI_ALIAS_FLAG).apply{style=Paint.Style.STROKE;strokeWidth=1f;color=Color.BLACK};val p=Paint(Paint.ANTI_ALIAS_FLAG).apply{color=Color.BLACK;textSize=9f};val h=25f+items.size*20f;c.drawRect(40f,startY,555f,startY+h,b);c.drawLine(40f,startY+25f,555f,startY+25f,b);listOf(80f,350f,400f,440f,490f).forEach{x->c.drawLine(x,startY,x,startY+h,b)};p.typeface=Typeface.create(Typeface.DEFAULT,Typeface.BOLD);c.drawText("S.No",45f,startY+17f,p);c.drawText("Description",85f,startY+17f,p);c.drawText("Unit",355f,startY+17f,p);c.drawText("Qty",405f,startY+17f,p);c.drawText("Rate",445f,startY+17f,p);c.drawText("Amount",495f,startY+17f,p);p.typeface=Typeface.DEFAULT;var y=startY+42f;items.forEachIndexed{i,item->c.drawText("${i+1}",50f,y,p);c.drawText(truncateText(item.description,40),85f,y,p);c.drawText(item.unit,355f,y,p);c.drawText(formatNumber(item.qty),405f,y,p);c.drawText(formatNumber(item.rate),445f,y,p);c.drawText(formatNumber(item.amount),495f,y,p);y+=20f}}
+    private fun drawBranding(c:Canvas,context:Context,company:CompanyProfile){val p=Paint(Paint.ANTI_ALIAS_FLAG);loadDrawableBitmap(context,R.drawable.seal_sign)?.let{b->val s=Bitmap.createScaledBitmap(b,150,150,true);c.drawBitmap(s,380f,640f,p);if(s!==b)s.recycle()};val t=Paint(Paint.ANTI_ALIAS_FLAG).apply{color=Color.BLACK;textSize=10f};c.drawText("For ${company.name}",380f,795f,t);t.typeface=Typeface.create(Typeface.DEFAULT,Typeface.BOLD);c.drawText("Authorized Signatory",420f,810f,t)}
+    private fun loadDrawableBitmap(context:Context,id:Int):Bitmap?=try{BitmapFactory.decodeResource(context.resources,id)}catch(_:Exception){null}
+    private fun formatCurrency(v:Double)="₹${String.format(Locale.US,"%.2f",v)}";private fun formatNumber(v:Double)=String.format(Locale.US,"%.2f",v);private fun truncateText(t:String,n:Int)=if(t.length<=n)t else t.take(n-3)+"..."
 }
