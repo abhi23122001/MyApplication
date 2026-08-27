@@ -19,7 +19,6 @@ import androidx.compose.ui.unit.sp
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
 import com.shahsurveyors.myapplication.data.FirebaseConstants
 import com.shahsurveyors.myapplication.ui.theme.*
 import java.text.SimpleDateFormat
@@ -31,6 +30,7 @@ private data class LiveNotification(
     val message: String,
     val time: String,
     val type: String,
+    val createdAt: Long,
     val read: Boolean
 )
 
@@ -45,7 +45,6 @@ fun NotificationCenter(viewModel: DashboardViewModel, onDismiss: () -> Unit) {
         if (uid.isBlank()) return@DisposableEffect onDispose { }
         val registration = firestore.collection(FirebaseConstants.COLLECTION_NOTIFICATIONS)
             .whereEqualTo("recipientUid", uid)
-            .orderBy("createdAt", Query.Direction.DESCENDING)
             .limit(50)
             .addSnapshotListener { snapshot, _ ->
                 if (snapshot == null) return@addSnapshotListener
@@ -57,9 +56,10 @@ fun NotificationCenter(viewModel: DashboardViewModel, onDismiss: () -> Unit) {
                         message = doc.getString("message") ?: "New notification",
                         time = SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()).format(timestamp.toDate()),
                         type = doc.getString("type") ?: "GENERAL",
+                        createdAt = timestamp.toDate().time,
                         read = doc.getBoolean("read") ?: false
                     )
-                }
+                }.sortedByDescending { it.createdAt }
             }
         onDispose { registration.remove() }
     }
