@@ -124,6 +124,7 @@ class MainActivity : ComponentActivity() {
                             composable("marketing") { MarketingScreen(onBack = { navController.popBackStack() }) }
                             composable("reports_finance") { FinancialReportScreen(onBack = { navController.popBackStack() }) }
                             composable("reports_work") { WorkProgressReportScreen(onBack = { navController.popBackStack() }) }
+                            composable("employee_reports") { EmployeeReportScreen(userRole = authViewModel.userRole, userRepository = userRepository, attendanceRepository = attendanceRepository, expenseRepository = expenseRepository, onBack = { navController.popBackStack() }) }
                         }
                     }
                 }
