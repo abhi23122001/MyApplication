@@ -85,6 +85,7 @@ val businessModules = listOf(
     ModuleData("Marketing", "Leads and conversion", Icons.Default.Campaign, "marketing")
 )
 val reportModules = listOf(
+    ModuleData("Employee Attendance + Expense PDF", "Admin-only employee-wise monthly report", Icons.Default.PictureAsPdf, "employee_reports"),
     ModuleData("Financial Reports", "Profit & Loss summaries", Icons.Default.Assessment, "reports_finance"),
     ModuleData("Work Progress", "Field and site reports", Icons.Default.Timeline, "reports_work")
 )
