@@ -32,6 +32,16 @@ class UserRepository(
         } catch (e: Exception) { emptyList() }
     }
 
+    /** Includes inactive employees so historical attendance/expense reports remain exportable. */
+    suspend fun getAllEmployeesForReports(): List<UserProfile> {
+        return try {
+            usersCollection.get().await().toObjects(UserProfile::class.java)
+                .filter { it.uid.isNotBlank() }
+                .filter { !it.role.equals(FirebaseConstants.ROLE_ADMIN, ignoreCase = true) }
+                .sortedBy { it.name.lowercase() }
+        } catch (e: Exception) { emptyList() }
+    }
+
     suspend fun updateUserStatus(uid: String, approved: Boolean, active: Boolean) {
         usersCollection.document(uid).update(
             mapOf(
