@@ -38,8 +38,7 @@ import com.shahsurveyors.myapplication.ui.more.MoreModulesScreen
 import com.shahsurveyors.myapplication.ui.ops.*
 import com.shahsurveyors.myapplication.ui.projects.ProjectManagementScreen
 import com.shahsurveyors.myapplication.ui.marketing.MarketingScreen
-import com.shahsurveyors.myapplication.ui.reports.FinancialReportScreen
-import com.shahsurveyors.myapplication.ui.reports.WorkProgressReportScreen
+import com.shahsurveyors.myapplication.ui.reports.*
 import com.shahsurveyors.myapplication.ui.splash.SplashScreen
 import com.shahsurveyors.myapplication.ui.survey.SurveyCalculatorScreen
 import com.shahsurveyors.myapplication.ui.tasks.*
@@ -111,14 +110,15 @@ class MainActivity : ComponentActivity() {
                             composable("terms_conditions") { TermsAndConditionsScreen(viewModel = adminViewModel, onBack = { navController.popBackStack() }) }
                             composable("salary") { SalaryManagementScreen(viewModel = salaryViewModel, onBack = { navController.popBackStack() }, onGenerateSalarySlip = { salary -> try { val file = SalarySlipGenerator.generatePdf(context, salary); val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file); val intent = Intent(Intent.ACTION_VIEW).apply { setDataAndType(uri, "application/pdf"); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }; try { context.startActivity(intent) } catch (_: ActivityNotFoundException) { val shareIntent = Intent(Intent.ACTION_SEND).apply { type = "application/pdf"; putExtra(Intent.EXTRA_STREAM, uri); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) }; context.startActivity(Intent.createChooser(shareIntent, "Open or share salary slip")) } } catch (e: Exception) { e.printStackTrace() } }) }
                             composable("billing") { val billingViewModel: BillingViewModel = viewModel(factory = BillingViewModelFactory(billingRepository)); BillingScreen(viewModel = billingViewModel, onBack = { navController.popBackStack() }) }
-                            composable("quotes") { val billingViewModel: BillingViewModel = viewModel(factory = BillingViewModelFactory(billingRepository)); BillingScreen(viewModel = billingViewModel, onBack = { navController.popBackStack() }) }
-                            composable("reports_finance") { FinancialReportScreen(onBack = { navController.popBackStack() }) }
-                            composable("reports_work") { WorkProgressReportScreen(onBack = { navController.popBackStack() }) }
                             composable("expense") { ExpenseClaimsScreen(viewModel = expenseViewModel, uid = authViewModel.currentUserUid ?: "", userName = authViewModel.userName, onBack = { navController.popBackStack() }) }
                             composable("dsr") { DailyStatusReportScreen(viewModel = dsrViewModel, onBack = { navController.popBackStack() }) }
-                            composable("clients") { CRMClientScreen(viewModel = clientViewModel, onBack = { navController.popBackStack() }) }
+                            composable("clients") { CRMClientScreen(viewModel = clientViewModel, onBack = { navController.popBackStack() }, onAddClient = { navController.navigate("add_client") }) }
+                            composable("add_client") { AddClientScreen(viewModel = clientViewModel, onBack = { navController.popBackStack() }, onSaved = { navController.popBackStack() }) }
                             composable("projects") { ProjectManagementScreen(onBack = { navController.popBackStack() }) }
                             composable("marketing") { MarketingScreen(onBack = { navController.popBackStack() }) }
+                            composable("quotes") { QuotationHistoryScreen(onBack = { navController.popBackStack() }) }
+                            composable("reports_finance") { FinancialReportScreen(onBack = { navController.popBackStack() }) }
+                            composable("reports_work") { WorkProgressReportScreen(onBack = { navController.popBackStack() }) }
                         }
                     }
                 }
