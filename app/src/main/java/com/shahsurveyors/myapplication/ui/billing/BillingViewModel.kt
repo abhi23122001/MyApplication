@@ -9,7 +9,6 @@ import androidx.lifecycle.viewModelScope
 import com.shahsurveyors.myapplication.data.BillingRepository
 import com.shahsurveyors.myapplication.data.local.BankDetails
 import com.shahsurveyors.myapplication.data.local.BillingDocumentEntity
-import com.shahsurveyors.myapplication.data.local.BillingItemEntity
 import com.shahsurveyors.myapplication.data.local.CompanyProfile
 import com.shahsurveyors.myapplication.data.local.TermConditionEntity
 import com.shahsurveyors.myapplication.models.DocType
@@ -24,91 +23,74 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
-class BillingViewModel(
-    private val repository: BillingRepository
-) : ViewModel() {
-
+class BillingViewModel(private val repository: BillingRepository) : ViewModel() {
     var isLoading by mutableStateOf(false)
         private set
-
     var statusMessage by mutableStateOf<String?>(null)
         private set
 
-    val companyProfile: StateFlow<CompanyProfile?> =
-        repository.companyProfile.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    val companyProfile: StateFlow<CompanyProfile?> = repository.companyProfile.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    val bankDetails: StateFlow<BankDetails?> = repository.bankDetails.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    val allTerms: StateFlow<List<TermConditionEntity>> = repository.allTerms.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val allDocuments: StateFlow<List<BillingDocumentEntity>> = repository.allDocuments.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val bankDetails: StateFlow<BankDetails?> =
-        repository.bankDetails.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
-
-    val allTerms: StateFlow<List<TermConditionEntity>> =
-        repository.allTerms.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val allDocuments: StateFlow<List<BillingDocumentEntity>> =
-        repository.allDocuments.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    fun saveGeneratedDocument(
-        data: BillingDocumentGenerator.DocumentData
-    ) {
+    fun saveGeneratedDocument(data: BillingDocumentGenerator.DocumentData) {
         if (isLoading) return
         viewModelScope.launch {
             isLoading = true
             statusMessage = "Saving billing document..."
             try {
                 val subTotal = data.items.sumOf { it.amount }
-                val taxAmount = when {
-                    data.docType == DocType.NON_GST_BILL -> 0.0
-                    data.gstType == "IGST" -> subTotal * (data.gstPercentage / 100.0)
-                    else -> subTotal * (data.gstPercentage / 100.0)
-                }
-                val document = BillingDocumentEntity(
-                    docType = data.docType,
-                    docNumber = data.docNumber,
-                    clientName = data.clientName,
-                    clientAddress = data.clientAddress,
-                    clientGstin = data.clientGstin,
-                    date = data.date,
-                    gstType = data.gstType,
-                    gstPercentage = data.gstPercentage,
-                    subTotal = subTotal,
-                    taxAmount = taxAmount,
-                    grandTotal = subTotal + taxAmount,
-                    status = "DRAFT",
-                    termsAndConditions = data.terms.joinToString("\n")
+                val taxAmount = if (data.docType == DocType.NON_GST_BILL) 0.0 else subTotal * (data.gstPercentage / 100.0)
+                repository.saveDocument(
+                    BillingDocumentEntity(
+                        docType = data.docType,
+                        docNumber = data.docNumber,
+                        clientName = data.clientName,
+                        clientAddress = data.clientAddress,
+                        clientGstin = data.clientGstin,
+                        date = data.date,
+                        gstType = data.gstType,
+                        gstPercentage = data.gstPercentage,
+                        subTotal = subTotal,
+                        taxAmount = taxAmount,
+                        grandTotal = subTotal + taxAmount,
+                        status = "DRAFT",
+                        paymentStatus = "UNPAID",
+                        paidAmount = 0.0,
+                        termsAndConditions = data.terms.joinToString("\n")
+                    ),
+                    data.items
                 )
-                repository.saveDocument(document, data.items)
                 statusMessage = "Billing document saved successfully."
             } catch (e: Exception) {
                 statusMessage = "Save failed: ${e.localizedMessage ?: "Unknown error"}"
-            } finally {
-                isLoading = false
-            }
+            } finally { isLoading = false }
         }
     }
 
-    fun updatePaymentStatus(
-        document: BillingDocumentEntity,
-        paymentStatus: String,
-        paidAmount: Double = document.paidAmount
-    ) {
+    fun updatePaymentStatus(document: BillingDocumentEntity, paymentStatus: String, paidAmount: Double = document.paidAmount) {
         if (isLoading) return
+        val normalized = paymentStatus.uppercase().let { if (it in setOf("PAID", "UNPAID", "PARTIAL")) it else "UNPAID" }
         viewModelScope.launch {
             isLoading = true
             statusMessage = "Updating payment status..."
             try {
-                val safePaid = paidAmount.coerceIn(0.0, document.grandTotal)
-                repository.updateDocument(
-                    document.copy(
-                        paymentStatus = paymentStatus,
-                        paidAmount = safePaid
-                    ),
-                    repository.getItemsForDocument(document.id).first()
-                )
+                val safePaid = when (normalized) {
+                    "PAID" -> document.grandTotal.coerceAtLeast(0.0)
+                    "UNPAID" -> 0.0
+                    else -> paidAmount.coerceIn(0.0, document.grandTotal.coerceAtLeast(0.0))
+                }
+                val finalStatus = when {
+                    safePaid <= 0.0 -> "UNPAID"
+                    safePaid >= document.grandTotal && document.grandTotal > 0.0 -> "PAID"
+                    else -> "PARTIAL"
+                }
+                repository.updatePaymentStatus(document.id, finalStatus, safePaid)
                 statusMessage = "Payment status updated successfully."
             } catch (e: Exception) {
                 statusMessage = "Payment update failed: ${e.localizedMessage ?: "Unknown error"}"
-            } finally {
-                isLoading = false
-            }
+            } finally { isLoading = false }
         }
     }
 
@@ -119,10 +101,7 @@ class BillingViewModel(
             statusMessage = "Converting quotation..."
             try {
                 val items = repository.getItemsForDocument(quotation.id).first()
-                if (items.isEmpty()) {
-                    statusMessage = "Quotation has no billing items."
-                    return@launch
-                }
+                if (items.isEmpty()) { statusMessage = "Quotation has no billing items."; return@launch }
                 val invoice = quotation.copy(
                     id = 0,
                     docType = DocType.TAX_INVOICE,
@@ -137,9 +116,7 @@ class BillingViewModel(
                 statusMessage = "Quotation converted to Invoice successfully."
             } catch (e: Exception) {
                 statusMessage = "Conversion failed: ${e.localizedMessage ?: "Unknown error"}"
-            } finally {
-                isLoading = false
-            }
+            } finally { isLoading = false }
         }
     }
 
@@ -149,46 +126,21 @@ class BillingViewModel(
             isLoading = true
             statusMessage = "Preparing PDF for upload..."
             try {
-                if (!file.exists()) {
-                    statusMessage = "PDF file not found."
-                    return@launch
-                }
+                if (!file.exists()) { statusMessage = "PDF file not found."; return@launch }
                 val bytes = withContext(Dispatchers.IO) { file.readBytes() }
-                if (bytes.isEmpty()) {
-                    statusMessage = "PDF file is empty."
-                    return@launch
-                }
-                val base64 = withContext(Dispatchers.Default) {
-                    Base64.encodeToString(bytes, Base64.NO_WRAP)
-                }
+                if (bytes.isEmpty()) { statusMessage = "PDF file is empty."; return@launch }
+                val base64 = withContext(Dispatchers.Default) { Base64.encodeToString(bytes, Base64.NO_WRAP) }
                 statusMessage = "Uploading PDF..."
                 val response = withContext(Dispatchers.IO) {
-                    RetrofitClient.api.handleAction(
-                        mapOf(
-                            "action" to "UPLOAD_BILLING_DOC",
-                            "client" to clientName,
-                            "docType" to docType,
-                            "fileData" to base64,
-                            "fileName" to file.name
-                        )
-                    )
+                    RetrofitClient.api.handleAction(mapOf("action" to "UPLOAD_BILLING_DOC", "client" to clientName, "docType" to docType, "fileData" to base64, "fileName" to file.name))
                 }
-                statusMessage = if (response.status?.equals("SUCCESS", ignoreCase = true) == true) {
-                    response.message?.ifBlank { "PDF uploaded successfully." } ?: "PDF uploaded successfully."
-                } else {
-                    response.message?.ifBlank { "PDF upload failed." } ?: "PDF upload failed."
-                }
+                statusMessage = if (response.status?.equals("SUCCESS", ignoreCase = true) == true) response.message?.ifBlank { "PDF uploaded successfully." } ?: "PDF uploaded successfully." else response.message?.ifBlank { "PDF upload failed." } ?: "PDF upload failed."
             } catch (e: Exception) {
                 statusMessage = "Sync failed: ${e.localizedMessage ?: "Unknown error"}"
-            } finally {
-                isLoading = false
-            }
+            } finally { isLoading = false }
         }
     }
 
     suspend fun getNextDocumentNumber(docType: DocType): String = repository.getNextDocNumber(docType)
-
-    fun clearStatus() {
-        statusMessage = null
-    }
+    fun clearStatus() { statusMessage = null }
 }
