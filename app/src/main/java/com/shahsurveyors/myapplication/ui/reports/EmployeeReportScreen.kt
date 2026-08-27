@@ -6,8 +6,6 @@ import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.PictureAsPdf
@@ -37,13 +35,7 @@ import java.util.TimeZone
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EmployeeReportScreen(
-    userRole: String,
-    userRepository: UserRepository,
-    attendanceRepository: AttendanceRepository,
-    expenseRepository: ExpenseRepository,
-    onBack: () -> Unit
-) {
+fun EmployeeReportScreen(userRole: String, userRepository: UserRepository, attendanceRepository: AttendanceRepository, expenseRepository: ExpenseRepository, onBack: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var employees by remember { mutableStateOf<List<UserProfile>>(emptyList()) }
@@ -56,73 +48,50 @@ fun EmployeeReportScreen(
     LaunchedEffect(Unit) {
         if (userRole.equals("admin", true)) {
             loading = true
-            employees = userRepository.getAllEmployees()
+            employees = userRepository.getAllEmployeesForReports()
             selected = employees.firstOrNull()
             loading = false
         }
     }
 
     if (!userRole.equals("admin", true)) {
-        Scaffold(topBar = { TopAppBar(title = { Text("Employee Reports") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } }) }) { p ->
-            Box(Modifier.fillMaxSize().padding(p), contentAlignment = Alignment.Center) { Text("Admin access required", color = ErrorRed, fontWeight = FontWeight.Bold) }
-        }
+        Scaffold(topBar = { TopAppBar(title = { Text("Employee Reports") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } }) }) { p -> Box(Modifier.fillMaxSize().padding(p), contentAlignment = Alignment.Center) { Text("Admin access required", color = ErrorRed, fontWeight = FontWeight.Bold) } }
         return
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Column { Text("Employee Reports", fontWeight = FontWeight.Bold, color = ShahWhite); Text("Attendance + expenses PDF", fontSize = 10.sp, color = ShahWhite.copy(.72f)) } },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = ShahWhite) } },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = ShahDarkGreen)
-            )
-        }
-    ) { p ->
+    Scaffold(topBar = { TopAppBar(title = { Column { Text("Employee Reports", fontWeight = FontWeight.Bold, color = ShahWhite); Text("Attendance + expenses PDF", fontSize = 10.sp, color = ShahWhite.copy(.72f)) } }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = ShahWhite) } }, colors = TopAppBarDefaults.topAppBarColors(containerColor = ShahDarkGreen)) }) { p ->
         LazyColumn(Modifier.fillMaxSize().padding(p).background(ShahGrey), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item {
-                Card(Modifier.fillMaxWidth(), RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = ShahWhite)) {
+                Card(Modifier.fillMaxWidth(), shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = ShahWhite)) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text("Select Employee", fontWeight = FontWeight.Bold, color = ShahDarkGreen)
                         var expanded by remember { mutableStateOf(false) }
                         ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
                             OutlinedTextField(selected?.name.orEmpty(), {}, readOnly = true, label = { Text("Employee") }, modifier = Modifier.menuAnchor().fillMaxWidth())
-                            ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                                employees.forEach { employee -> DropdownMenuItem(text = { Text(employee.name) }, onClick = { selected = employee; expanded = false; generated = false }) }
-                            }
+                            ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) { employees.forEach { employee -> DropdownMenuItem(text = { Text(employee.name) }, onClick = { selected = employee; expanded = false; generated = false }) } }
                         }
                         OutlinedTextField(month, { month = it; generated = false }, label = { Text("Report Month (YYYY-MM)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                        Text("PDF includes: name, date, location, present, absent, punch times, expense amount, paid/unpaid and approved/rejected status.", fontSize = 11.sp, color = ShahMediumGrey)
-                        Button(
-                            enabled = selected != null && month.matches(Regex("\\d{4}-\\d{2}")) && !loading,
-                            onClick = {
-                                val employee = selected ?: return@Button
-                                scope.launch {
-                                    loading = true; error = null; generated = false
-                                    try {
-                                        val attendance = attendanceRepository.getAttendanceForMonth(employee.uid, "$month-01", "$month-31")
-                                        val expenses = expenseRepository.getExpensesForUser(employee.uid)
-                                            .filter { e -> e.date?.toDate()?.let { SimpleDateFormat("yyyy-MM", Locale.ENGLISH).format(it) == month } == true }
-                                        val rows = buildDayRows(month, attendance)
-                                        val file = EmployeeReportPdfGenerator.generatePdf(context, employee, month, rows, expenses)
-                                        openPdfOrShare(context, file)
-                                        generated = true
-                                    } catch (e: Exception) { error = e.localizedMessage ?: "Unable to generate report" }
-                                    finally { loading = false }
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(containerColor = ShahGreen)
-                        ) { Icon(Icons.Default.PictureAsPdf, null); Spacer(Modifier.width(8.dp)); Text(if (loading) "GENERATING..." else "GENERATE & OPEN PDF") }
+                        Text("PDF: name, date, location, present, absent, punch times, expense amount, paid/unpaid, approved/rejected.", fontSize = 11.sp, color = ShahMediumGrey)
+                        Button(enabled = selected != null && month.matches(Regex("\\d{4}-\\d{2}")) && !loading, onClick = {
+                            val employee = selected ?: return@Button
+                            scope.launch {
+                                loading = true; error = null; generated = false
+                                try {
+                                    val attendance = attendanceRepository.getAttendanceForMonth(employee.uid, "$month-01", "$month-31")
+                                    val expenses = expenseRepository.getExpensesForUser(employee.uid).filter { e -> e.date?.toDate()?.let { SimpleDateFormat("yyyy-MM", Locale.ENGLISH).format(it) == month } == true }
+                                    val rows = buildDayRows(month, attendance)
+                                    val file = EmployeeReportPdfGenerator.generatePdf(context, employee, month, rows, expenses)
+                                    openPdfOrShare(context, file)
+                                    generated = true
+                                } catch (e: Exception) { error = e.localizedMessage ?: "Unable to generate report" }
+                                finally { loading = false }
+                            }
+                        }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = ShahGreen)) { Icon(Icons.Default.PictureAsPdf, null); Spacer(Modifier.width(8.dp)); Text(if (loading) "GENERATING..." else "GENERATE & OPEN PDF") }
                     }
                 }
             }
-            item {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) { Text("Employee-wise history", fontWeight = FontWeight.Bold, color = ShahDarkGreen); Text("Choose an employee and month, then export the complete report.", fontSize = 10.sp, color = ShahMediumGrey) }
-                    IconButton(onClick = { scope.launch { employees = userRepository.getAllEmployees() } }) { Icon(Icons.Default.Refresh, "Refresh", tint = ShahGreen) }
-                }
-            }
-            if (generated) item { Text("PDF generated successfully. Use the system viewer/share option to save or send it.", color = SuccessGreen, fontWeight = FontWeight.Bold, fontSize = 11.sp) }
+            item { Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("Employee-wise history", fontWeight = FontWeight.Bold, color = ShahDarkGreen); Text("Historical/inactive employees are also available.", fontSize = 10.sp, color = ShahMediumGrey) }; IconButton(onClick = { scope.launch { employees = userRepository.getAllEmployeesForReports() } }) { Icon(Icons.Default.Refresh, "Refresh", tint = ShahGreen) } } }
+            if (generated) item { Text("PDF generated successfully.", color = SuccessGreen, fontWeight = FontWeight.Bold, fontSize = 11.sp) }
             error?.let { msg -> item { Text(msg, color = ErrorRed, fontSize = 11.sp) } }
         }
     }
@@ -131,20 +100,13 @@ fun EmployeeReportScreen(
 private fun buildDayRows(month: String, attendance: List<AttendanceRecord>): List<EmployeeReportPdfGenerator.DayRow> {
     val parser = SimpleDateFormat("yyyy-MM", Locale.ENGLISH)
     val calendar = Calendar.getInstance(TimeZone.getTimeZone("GMT+05:30"), Locale.ENGLISH)
-    calendar.time = parser.parse(month) ?: Date()
-    calendar.set(Calendar.DAY_OF_MONTH, 1)
+    calendar.time = parser.parse(month) ?: Date(); calendar.set(Calendar.DAY_OF_MONTH, 1)
     val maxDay = calendar.getActualMaximum(Calendar.DAY_OF_MONTH)
     val today = SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH).apply { timeZone = TimeZone.getTimeZone("GMT+05:30") }.format(Date())
     val byDate = attendance.associateBy { it.date }
     return (1..maxDay).map { day ->
-        val date = "$month-${day.toString().padStart(2, '0')}"
-        val record = byDate[date]
-        val status = when {
-            record?.status == "APPROVED_LEAVE" -> "APPROVED LEAVE"
-            record != null && record.punchInTime != null -> if (record.punchOutTime == null) "PUNCHED IN" else "PRESENT"
-            date > today -> "NOT YET DUE"
-            else -> "ABSENT"
-        }
+        val date = "$month-${day.toString().padStart(2, '0')}"; val record = byDate[date]
+        val status = when { record?.status == "APPROVED_LEAVE" -> "APPROVED LEAVE"; record?.punchInTime != null -> if (record.punchOutTime == null) "PUNCHED IN" else "PRESENT"; date > today -> "NOT YET DUE"; else -> "ABSENT" }
         val inTime = record?.punchInTime?.toDate()?.let { SimpleDateFormat("hh:mm a", Locale.ENGLISH).format(it) } ?: "-"
         val outTime = record?.punchOutTime?.toDate()?.let { SimpleDateFormat("hh:mm a", Locale.ENGLISH).format(it) } ?: "-"
         EmployeeReportPdfGenerator.DayRow(date, status, record?.siteName?.ifBlank { "-" } ?: "-", inTime, outTime)
@@ -154,8 +116,5 @@ private fun buildDayRows(month: String, attendance: List<AttendanceRecord>): Lis
 private fun openPdfOrShare(context: Context, file: java.io.File) {
     val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
     val viewIntent = Intent(Intent.ACTION_VIEW).apply { setDataAndType(uri, "application/pdf"); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) }
-    try { context.startActivity(viewIntent) } catch (_: ActivityNotFoundException) {
-        val shareIntent = Intent(Intent.ACTION_SEND).apply { type = "application/pdf"; putExtra(Intent.EXTRA_STREAM, uri); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) }
-        context.startActivity(Intent.createChooser(shareIntent, "Save or share employee report"))
-    }
+    try { context.startActivity(viewIntent) } catch (_: ActivityNotFoundException) { val shareIntent = Intent(Intent.ACTION_SEND).apply { type = "application/pdf"; putExtra(Intent.EXTRA_STREAM, uri); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) }; context.startActivity(Intent.createChooser(shareIntent, "Save or share employee report")) }
 }
