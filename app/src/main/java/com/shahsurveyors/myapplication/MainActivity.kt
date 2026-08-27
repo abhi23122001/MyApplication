@@ -1,5 +1,7 @@
 package com.shahsurveyors.myapplication
 
+import android.content.ActivityNotFoundException
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -13,6 +15,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.FileProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -43,6 +46,7 @@ import com.shahsurveyors.myapplication.ui.survey.SurveyCalculatorScreen
 import com.shahsurveyors.myapplication.ui.tasks.*
 import com.shahsurveyors.myapplication.ui.components.MainScaffold
 import com.shahsurveyors.myapplication.ui.theme.ShahTheme
+import com.shahsurveyors.myapplication.utils.SalarySlipGenerator
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -147,7 +151,35 @@ class MainActivity : ComponentActivity() {
                             composable("company_settings") { CompanySettingsScreen(viewModel = adminViewModel, onBack = { navController.popBackStack() }) }
                             composable("bank_details") { BankDetailsScreen(viewModel = adminViewModel, onBack = { navController.popBackStack() }) }
                             composable("terms_conditions") { TermsAndConditionsScreen(viewModel = adminViewModel, onBack = { navController.popBackStack() }) }
-                            composable("salary") { SalaryManagementScreen(viewModel = salaryViewModel, onBack = { navController.popBackStack() }) }
+                            composable("salary") {
+                                SalaryManagementScreen(
+                                    viewModel = salaryViewModel,
+                                    onBack = { navController.popBackStack() },
+                                    onGenerateSalarySlip = { salary ->
+                                        try {
+                                            val file = SalarySlipGenerator.generatePdf(context, salary)
+                                            val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
+                                            val intent = Intent(Intent.ACTION_VIEW).apply {
+                                                setDataAndType(uri, "application/pdf")
+                                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                            }
+                                            try {
+                                                context.startActivity(intent)
+                                            } catch (_: ActivityNotFoundException) {
+                                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                                    type = "application/pdf"
+                                                    putExtra(Intent.EXTRA_STREAM, uri)
+                                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                                }
+                                                context.startActivity(Intent.createChooser(shareIntent, "Open or share salary slip"))
+                                            }
+                                        } catch (e: Exception) {
+                                            e.printStackTrace()
+                                        }
+                                    }
+                                )
+                            }
                             composable("billing") { val billingViewModel: BillingViewModel = viewModel(factory = BillingViewModelFactory(billingRepository)); BillingScreen(viewModel = billingViewModel, onBack = { navController.popBackStack() }) }
                             composable("expense") { ExpenseClaimsScreen(viewModel = expenseViewModel, uid = authViewModel.currentUserUid ?: "", userName = authViewModel.userName, onBack = { navController.popBackStack() }) }
                             composable("dsr") { DailyStatusReportScreen(viewModel = dsrViewModel, onBack = { navController.popBackStack() }) }
