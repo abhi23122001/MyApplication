@@ -30,25 +30,16 @@ fun AdminHubScreen(viewModel: AdminViewModel, onBack: () -> Unit, onNavigateToCo
     var selectedTab by remember { mutableIntStateOf(0) }
     LaunchedEffect(Unit) { viewModel.fetchAdminData() }
     val titles = listOf("Approvals", "Logins", "Expenses", "Attendance", "Settings")
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Column { Text("Admin Hub", fontWeight = FontWeight.Bold, color = ShahWhite); Text("Control center • people, approvals & settings", fontSize = 10.sp, color = ShahWhite.copy(.72f)) } },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = ShahWhite) } },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = ShahDarkGreen)
-            )
-        }
-    ) { padding ->
+    Scaffold(topBar = { TopAppBar(title = { Column { Text("Admin Hub", fontWeight = FontWeight.Bold, color = ShahWhite); Text("Control center • people, approvals & settings", fontSize = 10.sp, color = ShahWhite.copy(.72f)) } }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = ShahWhite) } }, colors = TopAppBarDefaults.topAppBarColors(containerColor = ShahDarkGreen)) }) { padding ->
         Column(Modifier.padding(padding).fillMaxSize().background(ShahGrey)) {
-            ApprovalCenterCard(viewModel, onClick = { selectedTab = 0 })
-            ScrollableTabRow(selectedTabIndex = selectedTab, containerColor = ShahWhite, contentColor = ShahGreen, edgePadding = 8.dp,
-                indicator = { positions -> if (selectedTab < positions.size) TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(positions[selectedTab]), color = ShahGreen) }) {
+            ApprovalCenterCard(viewModel) { selectedTab = 0 }
+            ScrollableTabRow(selectedTabIndex = selectedTab, containerColor = ShahWhite, contentColor = ShahGreen, edgePadding = 8.dp, indicator = { positions -> if (selectedTab < positions.size) TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(positions[selectedTab]), color = ShahGreen) }) {
                 titles.forEachIndexed { index, title -> Tab(selected = selectedTab == index, onClick = { selectedTab = index; if (index == 3) viewModel.refreshAttendance() }, text = { Text(title, fontWeight = FontWeight.Bold, fontSize = 11.sp) }) }
             }
             when (selectedTab) {
                 0 -> UnifiedApprovalList(viewModel)
                 1 -> PendingLoginsList(viewModel)
-                2 -> PendingExpensesList(viewModel)
+                2 -> ExpensesManagementList(viewModel)
                 3 -> AdminAttendanceList(viewModel)
                 else -> AdminSettingsList(onNavigateToCompanySettings, onNavigateToBankDetails, onNavigateToTerms)
             }
@@ -63,13 +54,8 @@ private fun ApprovalCenterCard(viewModel: AdminViewModel, onClick: () -> Unit) {
         Row(Modifier.padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
             Surface(shape = RoundedCornerShape(12.dp), color = ShahWhite.copy(.12f)) { Icon(Icons.Default.Approval, null, tint = ShahWhite, modifier = Modifier.padding(10.dp).size(28.dp)) }
             Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text("Pending Approvals", color = ShahWhite, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                Text("Leave • Attendance • Expense • Salary Advance", color = ShahWhite.copy(.72f), fontSize = 10.sp)
-            }
-            Surface(shape = RoundedCornerShape(50), color = if (viewModel.pendingApprovalCount > 0) WarningAmber else ShahWhite.copy(.12f)) {
-                Text(viewModel.pendingApprovalCount.toString(), Modifier.padding(horizontal = 12.dp, vertical = 7.dp), fontWeight = FontWeight.ExtraBold, color = if (viewModel.pendingApprovalCount > 0) ShahBlack else ShahWhite)
-            }
+            Column(Modifier.weight(1f)) { Text("Pending Approvals", color = ShahWhite, fontWeight = FontWeight.Bold, fontSize = 16.sp); Text("Leave • Attendance • Expense • Salary Advance", color = ShahWhite.copy(.72f), fontSize = 10.sp) }
+            Surface(shape = RoundedCornerShape(50), color = if (viewModel.pendingApprovalCount > 0) WarningAmber else ShahWhite.copy(.12f)) { Text(viewModel.pendingApprovalCount.toString(), Modifier.padding(horizontal = 12.dp, vertical = 7.dp), fontWeight = FontWeight.ExtraBold, color = if (viewModel.pendingApprovalCount > 0) ShahBlack else ShahWhite) }
         }
     }
 }
@@ -103,7 +89,7 @@ private fun ApprovalRequestCard(request: ApprovalRequestItem, viewModel: AdminVi
                 if (request.amount != null) Text("₹${request.amount}", fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
             }
             if (request.reason.isNotBlank()) Text("Reason: ${request.reason}", fontSize = 10.sp, color = ShahMediumGrey, modifier = Modifier.padding(top = 9.dp))
-            Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.End) {
                 OutlinedButton(onClick = { reviewRequest(request, false, viewModel) }) { Icon(Icons.Default.Close, "Reject"); Spacer(Modifier.width(4.dp)); Text("Reject") }
                 Spacer(Modifier.width(8.dp))
                 Button(onClick = { reviewRequest(request, true, viewModel) }, colors = ButtonDefaults.buttonColors(containerColor = ShahGreen)) { Icon(Icons.Default.Check, "Approve"); Spacer(Modifier.width(4.dp)); Text("Approve") }
@@ -138,18 +124,49 @@ private fun PendingLoginsList(viewModel: AdminViewModel) {
 }
 
 @Composable
-private fun PendingExpensesList(viewModel: AdminViewModel) {
-    if (viewModel.pendingExpenses.isEmpty() && !viewModel.isLoading) { EmptyAdminState(Icons.Default.ReceiptLong, "No pending expense claims", "Approved or new claims will be reflected here."); return }
+private fun ExpensesManagementList(viewModel: AdminViewModel) {
+    if (viewModel.allExpenses.isEmpty() && !viewModel.isLoading) { EmptyAdminState(Icons.Default.ReceiptLong, "No expense claims", "Submitted claims will appear here."); return }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        items(viewModel.pendingExpenses) { expense ->
-            Card(Modifier.fillMaxWidth(), RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = ShahWhite)) {
-                Row(Modifier.padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.ReceiptLong, null, tint = ShahGreen, modifier = Modifier.size(26.dp)); Spacer(Modifier.width(11.dp))
-                    Column(Modifier.weight(1f)) { Text(expense.userName, fontWeight = FontWeight.Bold, color = ShahBlack); Text(expense.category, fontSize = 10.sp, color = ShahGreen, fontWeight = FontWeight.Bold); Text(expense.description, fontSize = 10.sp, color = ShahMediumGrey); Text("₹ ${expense.amount}", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp) }
-                    Column { IconButton(onClick = { viewModel.approveExpense(expense.id, "APPROVED") }) { Icon(Icons.Default.CheckCircle, "Approve", tint = SuccessGreen) }; IconButton(onClick = { viewModel.approveExpense(expense.id, "REJECTED") }) { Icon(Icons.Default.Cancel, "Reject", tint = ErrorRed) } }
+        items(viewModel.allExpenses, key = { it.id }) { expense -> ExpenseAdminCard(expense, viewModel) }
+    }
+}
+
+@Composable
+private fun ExpenseAdminCard(expense: ExpenseRecord, viewModel: AdminViewModel) {
+    var showReviewDialog by remember(expense.id) { mutableStateOf(false) }
+    var approveAction by remember(expense.id) { mutableStateOf(true) }
+    var remark by remember(expense.id) { mutableStateOf("") }
+    val statusColor = when (expense.status) { "APPROVED" -> SuccessGreen; "REJECTED" -> ErrorRed; else -> WarningAmber }
+    Card(Modifier.fillMaxWidth(), RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = ShahWhite)) {
+        Column(Modifier.padding(15.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.ReceiptLong, null, tint = ShahGreen, modifier = Modifier.size(26.dp)); Spacer(Modifier.width(11.dp))
+                Column(Modifier.weight(1f)) { Text(expense.userName, fontWeight = FontWeight.Bold, color = ShahBlack); Text(expense.category.ifBlank { "Expense" }, fontSize = 10.sp, color = ShahGreen, fontWeight = FontWeight.Bold); Text("₹ ${"%.2f".format(Locale.US, expense.amount)}", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp) }
+                Surface(shape = RoundedCornerShape(50), color = statusColor.copy(.12f)) { Text(expense.status, Modifier.padding(horizontal = 9.dp, vertical = 5.dp), fontSize = 9.sp, fontWeight = FontWeight.Bold, color = statusColor) }
+            }
+            if (expense.projectName.isNotBlank()) Text("Project: ${expense.projectName}", fontSize = 10.sp, color = ShahMediumGrey, modifier = Modifier.padding(top = 6.dp))
+            if (expense.description.isNotBlank()) Text(expense.description, fontSize = 10.sp, color = ShahMediumGrey, modifier = Modifier.padding(top = 4.dp))
+            if (expense.adminRemark.isNotBlank()) Text("Admin remark: ${expense.adminRemark}", fontSize = 10.sp, color = ShahMediumGrey, modifier = Modifier.padding(top = 5.dp))
+            if (expense.status == "APPROVED") {
+                Text("Payment: ${expense.paymentStatus}", fontSize = 10.sp, color = if (expense.paymentStatus == "PAID") SuccessGreen else WarningAmber, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 5.dp))
+                if (expense.paymentStatus != "PAID") Button(onClick = { viewModel.markExpensePaid(expense.id) }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp), colors = ButtonDefaults.buttonColors(containerColor = ShahGreen)) { Icon(Icons.Default.Paid, null); Spacer(Modifier.width(6.dp)); Text("MARK AS PAID") }
+            } else if (expense.status == "PENDING") {
+                Row(Modifier.fillMaxWidth().padding(top = 9.dp), horizontalArrangement = Arrangement.End) {
+                    OutlinedButton(onClick = { approveAction = false; remark = ""; showReviewDialog = true }) { Icon(Icons.Default.Close, "Reject"); Spacer(Modifier.width(4.dp)); Text("Reject") }
+                    Spacer(Modifier.width(8.dp))
+                    Button(onClick = { approveAction = true; remark = ""; showReviewDialog = true }, colors = ButtonDefaults.buttonColors(containerColor = ShahGreen)) { Icon(Icons.Default.Check, "Approve"); Spacer(Modifier.width(4.dp)); Text("Approve") }
                 }
             }
         }
+    }
+    if (showReviewDialog) {
+        AlertDialog(
+            onDismissRequest = { showReviewDialog = false },
+            title = { Text(if (approveAction) "Approve Expense" else "Reject Expense") },
+            text = { OutlinedTextField(value = remark, onValueChange = { remark = it }, label = { Text("Admin remark") }, minLines = 3, modifier = Modifier.fillMaxWidth()) },
+            confirmButton = { TextButton(onClick = { viewModel.approveExpense(expense.id, if (approveAction) "APPROVED" else "REJECTED", remark); showReviewDialog = false }) { Text(if (approveAction) "Approve" else "Reject") } },
+            dismissButton = { TextButton(onClick = { showReviewDialog = false }) { Text("Cancel") } }
+        )
     }
 }
 
