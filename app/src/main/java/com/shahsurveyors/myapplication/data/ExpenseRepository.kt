@@ -11,30 +11,13 @@ class ExpenseRepository(
 ) {
     private val expensesCollection = firestore.collection(FirebaseConstants.COLLECTION_EXPENSES)
 
-    suspend fun getExpensesForUser(uid: String): List<ExpenseRecord> {
-        return try {
-            expensesCollection
-                .whereEqualTo("uid", uid)
-                .get()
-                .await()
-                .toObjects(ExpenseRecord::class.java)
-                .sortedByDescending { it.date?.seconds ?: 0L }
-        } catch (e: Exception) {
-            emptyList()
-        }
-    }
+    suspend fun getExpensesForUser(uid: String): List<ExpenseRecord> = try {
+        expensesCollection.whereEqualTo("uid", uid).get().await().toObjects(ExpenseRecord::class.java).sortedByDescending { it.date?.seconds ?: 0L }
+    } catch (_: Exception) { emptyList() }
 
-    suspend fun getAllExpenses(): List<ExpenseRecord> {
-        return try {
-            expensesCollection
-                .get()
-                .await()
-                .toObjects(ExpenseRecord::class.java)
-                .sortedByDescending { it.date?.seconds ?: 0L }
-        } catch (e: Exception) {
-            emptyList()
-        }
-    }
+    suspend fun getAllExpenses(): List<ExpenseRecord> = try {
+        expensesCollection.get().await().toObjects(ExpenseRecord::class.java).sortedByDescending { it.date?.seconds ?: 0L }
+    } catch (_: Exception) { emptyList() }
 
     suspend fun hasDuplicateExpense(uid: String, duplicateKey: String): Boolean {
         if (uid.isBlank() || duplicateKey.isBlank()) return false
@@ -43,43 +26,23 @@ class ExpenseRepository(
 
     suspend fun saveExpense(expense: ExpenseRecord) {
         val id = expense.id.ifBlank { expensesCollection.document().id }
-        expensesCollection.document(id)
-            .set(expense.copy(id = id))
-            .await()
+        expensesCollection.document(id).set(expense.copy(id = id)).await()
     }
 
-    suspend fun updateExpenseReview(
-        id: String,
-        status: String,
-        adminRemark: String,
-        reviewerUid: String,
-        reviewerName: String
-    ) {
+    suspend fun updateExpenseReview(id: String, status: String, adminRemark: String, reviewerUid: String, reviewerName: String) {
         val normalizedStatus = status.uppercase()
         require(normalizedStatus == "APPROVED" || normalizedStatus == "REJECTED") { "Invalid expense status" }
-        val updates = mutableMapOf<String, Any>(
-            "status" to normalizedStatus,
-            "adminRemark" to adminRemark.trim(),
-            "reviewedByUid" to reviewerUid,
-            "reviewedByName" to reviewerName,
-            "reviewedAt" to Timestamp.now()
-        )
-        if (normalizedStatus == "REJECTED") {
-            updates["paymentStatus"] = "NOT_PAYABLE"
-        } else {
-            updates["paymentStatus"] = "UNPAID"
-        }
+        val updates = mutableMapOf<String, Any>("status" to normalizedStatus, "adminRemark" to adminRemark.trim(), "reviewedByUid" to reviewerUid, "reviewedByName" to reviewerName, "reviewedAt" to Timestamp.now())
+        updates["paymentStatus"] = if (normalizedStatus == "REJECTED") "NOT_PAYABLE" else "UNPAID"
         expensesCollection.document(id).update(updates).await()
     }
 
     suspend fun markExpensePaid(id: String) {
         val uid = FirebaseAuth.getInstance().currentUser?.uid ?: "ADMIN"
-        expensesCollection.document(id).update(
-            mapOf(
-                "paymentStatus" to "PAID",
-                "paidByUid" to uid,
-                "paidAt" to Timestamp.now()
-            )
-        ).await()
+        expensesCollection.document(id).update(mapOf("paymentStatus" to "PAID", "paidByUid" to uid, "paidAt" to Timestamp.now())).await()
+    }
+
+    suspend fun markExpenseUnpaid(id: String) {
+        expensesCollection.document(id).update(mapOf("paymentStatus" to "UNPAID", "paidByUid" to "", "paidAt" to null)).await()
     }
 }
