@@ -11,6 +11,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 
 private data class ProjectItem(val id: String = "", val name: String = "", val client: String = "", val location: String = "", val status: String = "Active")
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProjectManagementScreen(onBack: () -> Unit) {
     val db = remember { FirebaseFirestore.getInstance() }
@@ -23,16 +24,16 @@ fun ProjectManagementScreen(onBack: () -> Unit) {
     fun load() {
         db.collection("projects").get().addOnSuccessListener { snap ->
             items = snap.documents.map { d -> ProjectItem(d.id, d.getString("name") ?: "", d.getString("clientName") ?: d.getString("client") ?: "", d.getString("location") ?: "", d.getString("status") ?: "Active") }
-        }.addOnFailureListener { error = it.message }
+        }.addOnFailureListener { error = it.message ?: "Unable to load projects" }
     }
     LaunchedEffect(Unit) { load() }
 
     Scaffold(topBar = { TopAppBar(title = { Text("Projects") }, navigationIcon = { TextButton(onClick = onBack) { Text("Back") } }) }, floatingActionButton = {
         FloatingActionButton(onClick = {
             if (name.isBlank()) { error = "Project name is required"; return@FloatingActionButton }
-            db.collection("projects").add(mapOf("name" to name.trim(), "clientName" to client.trim(), "location" to location.trim(), "status" to "Active"))
-                .addOnSuccessListener { name = ""; client = ""; location = ""; load() }
-                .addOnFailureListener { error = it.message }
+            db.collection("projects").document().set(mapOf("name" to name.trim(), "clientName" to client.trim(), "location" to location.trim(), "status" to "Active"))
+                .addOnSuccessListener { name = ""; client = ""; location = ""; error = null; load() }
+                .addOnFailureListener { error = it.message ?: "Unable to save project" }
         }) { Text("+") }
     }) { pad ->
         LazyColumn(modifier = Modifier.fillMaxSize().padding(pad).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
