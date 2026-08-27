@@ -16,9 +16,20 @@ class EquipmentRepository(private val firestore: FirebaseFirestore = FirebaseFir
     suspend fun getAllEquipment(): List<EquipmentModel> = equipmentCollection.get().await().toObjects(EquipmentModel::class.java)
     suspend fun saveEquipment(equipment: EquipmentModel) { val id = equipment.id.ifBlank { equipmentCollection.document().id }; equipmentCollection.document(id).set(equipment.copy(id = id)).await() }
     suspend fun updateEquipmentStatus(id: String, status: String, uid: String?, name: String?) { equipmentCollection.document(id).update(mapOf("status" to status, "assignedToUid" to uid, "assignedToName" to name)).await() }
-    suspend fun getActiveEmployees(): List<UserProfile> = try { firestore.collection(FirebaseConstants.COLLECTION_USERS).whereEqualTo("active", true).whereEqualTo("approved", true).get().await().toObjects(UserProfile::class.java).filter { it.role.lowercase() != "admin" }.sortedBy { it.name.lowercase() } } catch (_: Exception) { emptyList() }
 
-    suspend fun getActiveProjects(): List<ProjectModel> = try { firestore.collection(FirebaseConstants.COLLECTION_PROJECTS).get().await().toObjects(ProjectModel::class.java).filter { statusIsActive(it.status) }.sortedBy { it.name.lowercase() } } catch (_: Exception) { emptyList() }
+    suspend fun getActiveEmployees(): List<UserProfile> = try {
+        firestore.collection(FirebaseConstants.COLLECTION_USERS).whereEqualTo("active", true).whereEqualTo("approved", true).get().await().documents.mapNotNull { d ->
+            val profile = d.toObject(UserProfile::class.java) ?: return@mapNotNull null
+            profile.copy(uid = profile.uid.ifBlank { d.id })
+        }.filter { it.role.lowercase() != "admin" }.sortedBy { it.name.lowercase() }
+    } catch (_: Exception) { emptyList() }
+
+    suspend fun getActiveProjects(): List<ProjectModel> = try {
+        firestore.collection(FirebaseConstants.COLLECTION_PROJECTS).get().await().documents.mapNotNull { d ->
+            val project = d.toObject(ProjectModel::class.java) ?: return@mapNotNull null
+            project.copy(id = project.id.ifBlank { d.id })
+        }.filter { statusIsActive(it.status) }.sortedBy { it.name.lowercase() }
+    } catch (_: Exception) { emptyList() }
 
     private fun statusIsActive(status: String): Boolean = when (status.trim().uppercase()) { "ACTIVE", "STARTED", "IN_PROGRESS", "ONGOING" -> true; else -> false }
 
@@ -40,7 +51,7 @@ class EquipmentRepository(private val firestore: FirebaseFirestore = FirebaseFir
         require(project.id.isNotBlank()) { "Please select a project" }
         require(location.isNotBlank()) { "Please enter handover location" }
         val current = equipmentCollection.document(id).get().await().toObject(EquipmentModel::class.java) ?: throw IllegalArgumentException("Equipment not found")
-        require(current.status == "AVAILABLE") { "Equipment is no longer available" }
+        require(current.status.trim().uppercase() == "AVAILABLE") { "Equipment is no longer available" }
         val now = Timestamp.now()
         val cleanAccessories = accessories.map { it.trim() }.filter { it.isNotBlank() }.distinct()
         val equipmentRef = equipmentCollection.document(id)
@@ -51,7 +62,7 @@ class EquipmentRepository(private val firestore: FirebaseFirestore = FirebaseFir
             "handoverAt" to now, "handoverByUid" to handoverByUid, "handoverByName" to handoverByName, "handoverAccessories" to cleanAccessories
         )
         val history = mapOf<String, Any>(
-            "equipmentId" to id, "equipmentName" to current.name, "action" to "HANDOVER", "employeeUid" to employee.uid,
+            "id" to historyRef.id, "equipmentId" to id, "equipmentName" to current.name, "action" to "HANDOVER", "employeeUid" to employee.uid,
             "employeeName" to employee.name, "projectId" to project.id, "projectName" to project.name, "location" to location.trim(),
             "accessories" to cleanAccessories, "remarks" to "", "actionByUid" to handoverByUid, "actionByName" to handoverByName, "actionAt" to now
         )
@@ -63,10 +74,10 @@ class EquipmentRepository(private val firestore: FirebaseFirestore = FirebaseFir
         val admin = FirebaseAuth.getInstance().currentUser
         val now = Timestamp.now()
         val current = equipmentCollection.document(id).get().await().toObject(EquipmentModel::class.java) ?: throw IllegalArgumentException("Equipment not found")
-        require(current.status == "IN_USE") { "Equipment is not currently assigned" }
+        require(current.status.trim().uppercase() == "IN_USE") { "Equipment is not currently assigned" }
         val historyRef = historyCollection.document()
         val history = mapOf<String, Any>(
-            "equipmentId" to id, "equipmentName" to current.name, "action" to "RETURN", "employeeUid" to (current.assignedToUid ?: ""),
+            "id" to historyRef.id, "equipmentId" to id, "equipmentName" to current.name, "action" to "RETURN", "employeeUid" to (current.assignedToUid ?: ""),
             "employeeName" to (current.assignedToName ?: ""), "projectId" to (current.assignedProjectId ?: ""), "projectName" to (current.assignedProjectName ?: ""),
             "location" to location.trim(), "accessories" to current.handoverAccessories, "remarks" to remarks.trim(),
             "actionByUid" to (admin?.uid ?: "ADMIN"), "actionByName" to (admin?.displayName ?: "Admin"), "actionAt" to now
