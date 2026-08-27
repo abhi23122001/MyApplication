@@ -21,7 +21,7 @@ data class AttendanceRecord(
     val id: String = "",
     val uid: String = "",
     val userName: String = "",
-    val date: String = "", // yyyy-MM-dd
+    val date: String = "",
     val punchInTime: Timestamp? = null,
     val punchOutTime: Timestamp? = null,
     val punchInLat: Double? = null,
@@ -31,8 +31,6 @@ data class AttendanceRecord(
     val siteName: String = "",
     val selfieUrl: String? = null,
     val status: String = "PRESENT",
-    // Attendance/payroll metrics. These are populated by the attendance logic
-    // and intentionally kept separate from the final salary calculation.
     val lateMinutes: Int = 0,
     val earlyOutMinutes: Int = 0,
     val workingMinutes: Int = 0,
@@ -51,7 +49,7 @@ data class ProjectModel(
     val siteLocation: String = "",
     val latitude: Double? = null,
     val longitude: Double? = null,
-    val geofenceRadius: Double = 500.0, // meters
+    val geofenceRadius: Double = 500.0,
     val startDate: Timestamp? = null,
     val endDate: Timestamp? = null,
     val status: String = "ACTIVE",
@@ -70,7 +68,15 @@ data class ExpenseRecord(
     val date: Timestamp? = null,
     val description: String = "",
     val receiptUrl: String? = null,
-    val status: String = "PENDING" // PENDING, APPROVED, REJECTED
+    val status: String = "PENDING",
+    val paymentStatus: String = "UNPAID",
+    val adminRemark: String = "",
+    val reviewedByUid: String = "",
+    val reviewedByName: String = "",
+    val reviewedAt: Timestamp? = null,
+    val paidByUid: String = "",
+    val paidAt: Timestamp? = null,
+    val duplicateKey: String = ""
 )
 
 data class DSRModel(
@@ -93,7 +99,7 @@ data class EquipmentModel(
     val modelNumber: String = "",
     val serialNumber: String = "",
     val category: String = "",
-    val status: String = "AVAILABLE", // AVAILABLE, IN_USE, MAINTENANCE
+    val status: String = "AVAILABLE",
     val assignedToUid: String? = null,
     val assignedToName: String? = null,
     val lastMaintenanceDate: Timestamp? = null
@@ -108,8 +114,8 @@ data class TaskModel(
     val projectId: String = "",
     val projectName: String = "",
     val dueDate: Timestamp? = null,
-    val priority: String = "MEDIUM", // LOW, MEDIUM, HIGH
-    val status: String = "OPEN" // OPEN, IN_PROGRESS, COMPLETED
+    val priority: String = "MEDIUM",
+    val status: String = "OPEN"
 )
 
 data class ClientModel(
