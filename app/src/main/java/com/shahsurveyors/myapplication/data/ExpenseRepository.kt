@@ -1,7 +1,8 @@
 package com.shahsurveyors.myapplication.data
 
+import com.google.firebase.Timestamp
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
 import com.shahsurveyors.myapplication.models.ExpenseRecord
 import kotlinx.coroutines.tasks.await
 
@@ -12,12 +13,12 @@ class ExpenseRepository(
 
     suspend fun getExpensesForUser(uid: String): List<ExpenseRecord> {
         return try {
-            val snapshot = expensesCollection
+            expensesCollection
                 .whereEqualTo("uid", uid)
-                .orderBy("date", Query.Direction.DESCENDING)
                 .get()
                 .await()
-            snapshot.toObjects(ExpenseRecord::class.java)
+                .toObjects(ExpenseRecord::class.java)
+                .sortedByDescending { it.date?.seconds ?: 0L }
         } catch (e: Exception) {
             emptyList()
         }
@@ -25,14 +26,19 @@ class ExpenseRepository(
 
     suspend fun getAllExpenses(): List<ExpenseRecord> {
         return try {
-            val snapshot = expensesCollection
-                .orderBy("date", Query.Direction.DESCENDING)
+            expensesCollection
                 .get()
                 .await()
-            snapshot.toObjects(ExpenseRecord::class.java)
+                .toObjects(ExpenseRecord::class.java)
+                .sortedByDescending { it.date?.seconds ?: 0L }
         } catch (e: Exception) {
             emptyList()
         }
+    }
+
+    suspend fun hasDuplicateExpense(uid: String, duplicateKey: String): Boolean {
+        if (uid.isBlank() || duplicateKey.isBlank()) return false
+        return getExpensesForUser(uid).any { it.duplicateKey == duplicateKey && it.status != "REJECTED" }
     }
 
     suspend fun saveExpense(expense: ExpenseRecord) {
@@ -42,9 +48,38 @@ class ExpenseRepository(
             .await()
     }
 
-    suspend fun updateExpenseStatus(id: String, status: String) {
-        expensesCollection.document(id)
-            .update("status", status)
-            .await()
+    suspend fun updateExpenseReview(
+        id: String,
+        status: String,
+        adminRemark: String,
+        reviewerUid: String,
+        reviewerName: String
+    ) {
+        val normalizedStatus = status.uppercase()
+        require(normalizedStatus == "APPROVED" || normalizedStatus == "REJECTED") { "Invalid expense status" }
+        val updates = mutableMapOf<String, Any>(
+            "status" to normalizedStatus,
+            "adminRemark" to adminRemark.trim(),
+            "reviewedByUid" to reviewerUid,
+            "reviewedByName" to reviewerName,
+            "reviewedAt" to Timestamp.now()
+        )
+        if (normalizedStatus == "REJECTED") {
+            updates["paymentStatus"] = "NOT_PAYABLE"
+        } else {
+            updates["paymentStatus"] = "UNPAID"
+        }
+        expensesCollection.document(id).update(updates).await()
+    }
+
+    suspend fun markExpensePaid(id: String) {
+        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: "ADMIN"
+        expensesCollection.document(id).update(
+            mapOf(
+                "paymentStatus" to "PAID",
+                "paidByUid" to uid,
+                "paidAt" to Timestamp.now()
+            )
+        ).await()
     }
 }
