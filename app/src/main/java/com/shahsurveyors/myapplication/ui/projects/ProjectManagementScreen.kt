@@ -27,7 +27,8 @@ private data class ProjectItem(
     val status: String = "Active"
 )
 
-private val projectStatuses = listOf("Active", "Started", "Stopped", "Completed")
+// Keep all existing statuses and add Handover as a selectable project state.
+private val projectStatuses = listOf("Active", "Started", "Stopped", "Completed", "Handover")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
