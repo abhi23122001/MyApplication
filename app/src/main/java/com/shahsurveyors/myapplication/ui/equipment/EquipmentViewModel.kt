@@ -6,46 +6,29 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.auth.FirebaseAuth
 import com.shahsurveyors.myapplication.data.EquipmentRepository
 import com.shahsurveyors.myapplication.models.EquipmentModel
+import com.shahsurveyors.myapplication.models.ProjectModel
+import com.shahsurveyors.myapplication.models.UserProfile
 import kotlinx.coroutines.launch
 
-class EquipmentViewModel(
-    private val repository: EquipmentRepository
-) : ViewModel() {
+class EquipmentViewModel(private val repository: EquipmentRepository) : ViewModel() {
     var isLoading by mutableStateOf(false)
     var errorMessage by mutableStateOf<String?>(null)
     val equipmentList = mutableStateListOf<EquipmentModel>()
+    val employees = mutableStateListOf<UserProfile>()
+    val projects = mutableStateListOf<ProjectModel>()
 
-    fun fetchEquipment() {
-        viewModelScope.launch {
-            isLoading = true
-            try {
-                val list = repository.getAllEquipment()
-                equipmentList.clear()
-                equipmentList.addAll(list)
-            } catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to load equipment" }
-            finally { isLoading = false }
-        }
+    fun fetchEquipment() { viewModelScope.launch { isLoading = true; try { equipmentList.clear(); equipmentList.addAll(repository.getAllEquipment()) } catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to load equipment" } finally { isLoading = false } } }
+    fun loadHandoverOptions() { viewModelScope.launch { try { employees.clear(); employees.addAll(repository.getActiveEmployees()); projects.clear(); projects.addAll(repository.getActiveProjects()) } catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to load handover options" } } }
+    fun handoverEquipment(id: String, employee: UserProfile, project: ProjectModel, location: String, accessories: List<String>, onDone: () -> Unit) {
+        if (employee.uid.isBlank()) { errorMessage = "Please select an employee"; return }
+        if (project.id.isBlank()) { errorMessage = "Please select a project"; return }
+        if (location.isBlank()) { errorMessage = "Please enter handover location"; return }
+        viewModelScope.launch { isLoading = true; errorMessage = null; try { val admin = FirebaseAuth.getInstance().currentUser; repository.saveHandover(id, employee, project, location, accessories, admin?.uid ?: "ADMIN", admin?.displayName ?: "Admin"); fetchEquipment(); onDone() } catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to confirm handover" } finally { isLoading = false } }
     }
-
-    fun addEquipment(name: String, modelNumber: String, serialNumber: String, category: String, onDone: () -> Unit) {
-        val cleanName = name.trim(); val cleanSerial = serialNumber.trim()
-        if (cleanName.isBlank() || cleanSerial.isBlank()) { errorMessage = "Equipment name and serial number are required"; return }
-        viewModelScope.launch {
-            isLoading = true; errorMessage = null
-            try {
-                if (equipmentList.any { it.serialNumber.trim().equals(cleanSerial, ignoreCase = true) }) { errorMessage = "This serial number already exists"; return@launch }
-                repository.saveEquipment(EquipmentModel(name = cleanName, modelNumber = modelNumber.trim(), serialNumber = cleanSerial, category = category.trim(), status = "AVAILABLE"))
-                fetchEquipment(); onDone()
-            } catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to save equipment" }
-            finally { isLoading = false }
-        }
-    }
-
-    fun updateStatus(id: String, status: String, uid: String?, name: String?) {
-        viewModelScope.launch { try { repository.updateEquipmentStatus(id, status, uid, name); fetchEquipment() } catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to update equipment" } }
-    }
-
+    fun returnEquipment(id: String) { viewModelScope.launch { isLoading = true; try { repository.returnEquipment(id); fetchEquipment() } catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to return equipment" } finally { isLoading = false } } }
+    fun updateStatus(id: String, status: String, uid: String?, name: String?) { viewModelScope.launch { try { repository.updateEquipmentStatus(id, status, uid, name); fetchEquipment() } catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to update equipment" } } }
     fun clearError() { errorMessage = null }
 }
