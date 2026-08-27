@@ -11,11 +11,7 @@ import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
 
-/**
- * Single payroll calculation point. Salary changes are effective-date based,
- * so a change in the middle of a month is prorated by working day instead of
- * incorrectly applying the new salary to the entire month.
- */
+/** Single payroll calculation point. */
 class PayrollCalculator(
     private val userRepository: UserRepository = UserRepository(),
     private val salaryRepository: SalaryRepository = SalaryRepository(),
@@ -29,21 +25,34 @@ class PayrollCalculator(
         val start = monthStart.toString()
         val end = monthEnd.toString()
         val scheduledWorkingDays = countWorkingDays(monthStart, monthEnd)
+        val users = userRepository.getAllEmployees()
+        val profiles = salaryRepository.getAllProfiles()
+
+        // Payroll is driven by saved salary profiles. This also makes payroll robust
+        // if the employee directory query changes its role/status filtering.
+        val employeeUids = (users.map { it.uid } + profiles.map { it.employeeUid })
+            .filter { it.isNotBlank() }
+            .distinct()
         val result = mutableListOf<SalaryData>()
 
-        userRepository.getAllEmployees().forEach { user ->
-            val history = salaryRepository.getHistory(user.uid)
-                .filter { it.effectiveFrom.isNotBlank() }
+        employeeUids.forEach { uid ->
+            val user = users.firstOrNull { it.uid == uid }
+            val history = profiles
+                .filter { it.employeeUid == uid && it.effectiveFrom.isNotBlank() }
                 .sortedByDescending { it.effectiveFrom }
             if (history.isEmpty()) return@forEach
 
             fun profileFor(date: LocalDate): SalaryProfileModel? {
                 val value = date.toString()
-                return history.firstOrNull { it.effectiveFrom <= value && (it.effectiveTo == null || it.effectiveTo!! > value) }
+                return history.firstOrNull {
+                    it.effectiveFrom <= value && (it.effectiveTo == null || it.effectiveTo!! > value)
+                }
             }
 
-            val attendance = attendanceRepository.getAttendanceForMonth(user.uid, start, end)
-            val approvedLeaveDates = expandApprovedLeaveDates(leaveRepository.getRequestsForUser(user.uid), monthStart, monthEnd)
+            val attendance = attendanceRepository.getAttendanceForMonth(uid, start, end)
+            val approvedLeaveDates = expandApprovedLeaveDates(
+                leaveRepository.getRequestsForUser(uid), monthStart, monthEnd
+            )
             val attendanceLeaveDates = attendance
                 .filter { it.status == "APPROVED_LEAVE" }
                 .mapNotNull { runCatching { LocalDate.parse(it.date) }.getOrNull() }
@@ -95,29 +104,30 @@ class PayrollCalculator(
             val earlyOutCount = attendance.count { it.isEarlyOut && it.status != "APPROVED_LEAVE" }
             val missingPunchOutCount = attendance.count { it.punchOutMissing }
 
-            // Only APPROVED advances are deducted. Each approved request starts
-            // its installment schedule from the requested salary month.
-            val approvedAdvances = advanceSalaryRepository.getForUser(user.uid)
+            val approvedAdvances = advanceSalaryRepository.getForUser(uid)
                 .filter { it.status == "APPROVED" && it.approvedAmount > 0.0 && it.installments > 0 }
             val advanceDeduction = approvedAdvances.sumOf { advance ->
                 val firstMonth = runCatching { YearMonth.parse(advance.salaryMonth) }.getOrNull()
                     ?: return@sumOf 0.0
-                val monthIndex = (month.year - firstMonth.year) * 12 + (month.monthValue - firstMonth.monthValue)
+                val monthIndex = (month.year - firstMonth.year) * 12 +
+                    (month.monthValue - firstMonth.monthValue)
                 if (monthIndex in 0 until advance.installments) {
                     advance.approvedAmount / advance.installments
                 } else 0.0
             }
 
-            val latestProfile = history.firstOrNull { it.effectiveFrom <= end } ?: history.last()
+            val latestProfile = history.firstOrNull { it.effectiveFrom <= end } ?: return@forEach
             val basePay = monthlyGross + dailyGross
             val totalDeductions = absenceDeduction + advanceDeduction
             val net = (basePay - totalDeductions + overtimePay).coerceAtLeast(0.0)
-            val displayPayType = if (history.filter { it.effectiveFrom <= end }.map { it.payType }.distinct().size > 1) "MIXED" else latestProfile.payType
+            val displayPayType = if (
+                history.filter { it.effectiveFrom <= end }.map { it.payType }.distinct().size > 1
+            ) "MIXED" else latestProfile.payType
 
             result += SalaryData(
-                id = user.uid.take(6),
-                name = user.name,
-                dept = user.department,
+                id = uid.take(6),
+                name = user?.name?.takeIf { it.isNotBlank() } ?: latestProfile.employeeName,
+                dept = user?.department ?: "",
                 presentDays = presentDays,
                 approvedLeaveDays = leaveDays,
                 absentDays = absentDays,
@@ -151,7 +161,11 @@ class PayrollCalculator(
 
     private fun isWorkingDay(date: LocalDate): Boolean = date.dayOfWeek != DayOfWeek.SUNDAY
 
-    private fun expandApprovedLeaveDates(requests: List<LeaveRequestModel>, monthStart: LocalDate, monthEnd: LocalDate): Set<LocalDate> {
+    private fun expandApprovedLeaveDates(
+        requests: List<LeaveRequestModel>,
+        monthStart: LocalDate,
+        monthEnd: LocalDate
+    ): Set<LocalDate> {
         val result = mutableSetOf<LocalDate>()
         requests.filter { it.status == "APPROVED" }.forEach { request ->
             val from = runCatching { LocalDate.parse(request.fromDate) }.getOrNull() ?: return@forEach
