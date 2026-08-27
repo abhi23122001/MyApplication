@@ -82,7 +82,10 @@ fun EmployeePermissionsScreen(onBack: () -> Unit = {}) {
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     items(employees, key = { it.uid }) { employee ->
-                        Card(Modifier.fillMaxWidth(), onClick = { selected = employee }) {
+                        Card(
+                            onClick = { selected = employee },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
                             Column(Modifier.padding(16.dp)) {
                                 Text(employee.name.ifBlank { "Unnamed employee" }, style = MaterialTheme.typography.titleMedium)
                                 Text(employee.department, style = MaterialTheme.typography.bodySmall)
