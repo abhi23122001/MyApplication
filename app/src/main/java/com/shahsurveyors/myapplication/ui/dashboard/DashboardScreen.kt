@@ -43,6 +43,8 @@ fun DashboardScreen(
     onNavigateToExpense: () -> Unit,
     onNavigateToDsr: () -> Unit,
     onNavigateToClients: () -> Unit,
+    onNavigateToProjects: () -> Unit = {},
+    onNavigateToBroadcast: () -> Unit = {},
     isAdmin: Boolean = false,
     onRefresh: () -> Unit = {}
 ) {
@@ -112,8 +114,8 @@ fun DashboardScreen(
                     }
                 }
             }
-            item { SummarySection(viewModel, isAdmin, onNavigateToAdmin) }
-            item { BroadcastSection(viewModel.noticeMessage.ifBlank { "No new admin announcements." }) }
+            item { SummarySection(viewModel, isAdmin, onEmployeesClick = onNavigateToAdmin, onAttendanceClick = onNavigateToAttendance, onProjectsClick = onNavigateToProjects, onExpensesClick = onNavigateToExpense) }
+            item { BroadcastSection(viewModel.noticeMessage.ifBlank { "No new admin announcements." }, onClick = if (isAdmin) onNavigateToBroadcast else null) }
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
@@ -132,15 +134,22 @@ fun DashboardScreen(
 }
 
 @Composable
-fun SummarySection(viewModel: DashboardViewModel, isAdmin: Boolean, onEmployeesClick: () -> Unit = {}) {
+fun SummarySection(
+    viewModel: DashboardViewModel,
+    isAdmin: Boolean,
+    onEmployeesClick: () -> Unit = {},
+    onAttendanceClick: () -> Unit = {},
+    onProjectsClick: () -> Unit = {},
+    onExpensesClick: () -> Unit = {}
+) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             SummaryCard("Employees", viewModel.totalEmployees.toString(), Icons.Default.People, ShahGreen, Modifier.weight(1f), onEmployeesClick)
-            SummaryCard("Attendance", "${viewModel.presentToday} Present", Icons.Default.CheckCircle, SuccessGreen, Modifier.weight(1f))
+            SummaryCard("Attendance", "${viewModel.presentToday} Present", Icons.Default.CheckCircle, SuccessGreen, Modifier.weight(1f), onAttendanceClick)
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            SummaryCard("Projects", viewModel.activeProjects.toString(), Icons.Default.Work, ShahDarkGreen, Modifier.weight(1f))
-            SummaryCard("Expenses", viewModel.monthlyExpenses, Icons.Default.AccountBalanceWallet, WarningAmber, Modifier.weight(1f))
+            SummaryCard("Projects", viewModel.activeProjects.toString(), Icons.Default.Work, ShahDarkGreen, Modifier.weight(1f), onProjectsClick)
+            SummaryCard("Expenses", viewModel.monthlyExpenses, Icons.Default.AccountBalanceWallet, WarningAmber, Modifier.weight(1f), onExpensesClick)
         }
         if (isAdmin) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -174,8 +183,15 @@ fun SummaryCard(title: String, value: String, icon: ImageVector, color: Color, m
 }
 
 @Composable
-fun BroadcastSection(message: String) {
-    Surface(color = ShahGreen.copy(alpha = 0.06f), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, ShahGreen.copy(alpha = 0.18f))) {
+fun BroadcastSection(message: String, onClick: (() -> Unit)? = null) {
+    Card(
+        onClick = onClick ?: {},
+        enabled = onClick != null,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = ShahGreen.copy(alpha = 0.06f)),
+        border = BorderStroke(1.dp, ShahGreen.copy(alpha = 0.18f))
+    ) {
         Row(Modifier.padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
             Surface(shape = RoundedCornerShape(11.dp), color = ShahGreen.copy(alpha = 0.12f)) {
                 Icon(Icons.Default.Campaign, null, tint = ShahGreen, modifier = Modifier.padding(9.dp).size(22.dp))
@@ -185,6 +201,7 @@ fun BroadcastSection(message: String) {
                 Text("Admin Broadcast", style = MaterialTheme.typography.labelLarge, color = ShahGreen, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(2.dp))
                 Text(message, style = MaterialTheme.typography.bodyMedium, color = ShahBlack)
+                if (onClick != null) Text("Tap to manage announcements", style = MaterialTheme.typography.labelSmall, color = ShahGreen)
             }
         }
     }
