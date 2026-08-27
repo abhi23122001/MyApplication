@@ -6,6 +6,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
+import com.google.firebase.messaging.FirebaseMessaging
 import com.shahsurveyors.myapplication.data.AuthRepository
 import com.shahsurveyors.myapplication.data.SessionManager
 import com.shahsurveyors.myapplication.data.UserRepository
@@ -21,10 +25,8 @@ class AuthViewModel(
 
     var isLoading by mutableStateOf(false)
     var authError by mutableStateOf<String?>(null)
-
     var isUserLoggedIn by mutableStateOf(false)
     var userStatus by mutableStateOf("PENDING")
-
     var userName by mutableStateOf("")
     var userRole by mutableStateOf("")
     var userAccess by mutableStateOf("")
@@ -51,6 +53,7 @@ class AuthViewModel(
                         userDepartment = session["dept"] ?: ""
                         isUserLoggedIn = true
                         userStatus = "APPROVED"
+                        registerFcmToken(uid)
                     }
                 }
             } catch (e: Exception) {
@@ -100,7 +103,6 @@ class AuthViewModel(
             authError = "Profile not found."
             return
         }
-
         if (!profile.active) {
             authRepository.signOut()
             sessionManager.clearSession()
@@ -110,7 +112,6 @@ class AuthViewModel(
             authError = "Account disabled."
             return
         }
-
         if (!profile.approved && profile.role != "admin") {
             authRepository.signOut()
             sessionManager.clearSession()
@@ -120,7 +121,6 @@ class AuthViewModel(
             authError = "Waiting for Admin approval."
             return
         }
-
         saveUserSession(profile)
     }
 
@@ -141,6 +141,19 @@ class AuthViewModel(
         isUserLoggedIn = true
         currentUserUid = profile.uid
         authError = null
+        registerFcmToken(profile.uid)
+    }
+
+    private fun registerFcmToken(uid: String) {
+        if (uid.isBlank()) return
+        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+            if (!task.isSuccessful) return@addOnCompleteListener
+            val token = task.result ?: return@addOnCompleteListener
+            FirebaseFirestore.getInstance().collection("users").document(uid).set(
+                mapOf("fcmToken" to token, "fcmTokenUpdatedAt" to FieldValue.serverTimestamp()),
+                SetOptions.merge()
+            )
+        }
     }
 
     fun signup(name: String, email: String, pass: String, dept: String) {
@@ -153,21 +166,10 @@ class AuthViewModel(
                     authError = "Invalid input details."
                     return@launch
                 }
-
                 authRepository.signUp(email, pass)
                 val uid = authRepository.currentUser?.uid ?: throw Exception("Signup failed")
-
-                val profile = UserProfile(
-                    uid = uid,
-                    name = name,
-                    email = email,
-                    department = dept.uppercase(),
-                    role = "employee",
-                    approved = false,
-                    active = true
-                )
+                val profile = UserProfile(uid = uid, name = name, email = email, department = dept.uppercase(), role = "employee", approved = false, active = true)
                 userRepository.saveUserProfile(profile)
-
                 authRepository.signOut()
                 sessionManager.clearSession()
                 isUserLoggedIn = false
