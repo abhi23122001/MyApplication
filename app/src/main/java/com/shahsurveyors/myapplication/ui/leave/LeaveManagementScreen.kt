@@ -41,8 +41,10 @@ fun LeaveManagementScreen(
     val scope = rememberCoroutineScope()
     val isAdmin = userRole.equals("admin", ignoreCase = true)
     val snackbarHostState = remember { SnackbarHostState() }
+
     var requests by remember { mutableStateOf<List<LeaveRequestModel>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
+    var isSubmitting by remember { mutableStateOf(false) }
     var leaveType by remember { mutableStateOf("CASUAL") }
     var fromDate by remember { mutableStateOf("") }
     var toDate by remember { mutableStateOf("") }
@@ -52,8 +54,11 @@ fun LeaveManagementScreen(
     fun loadRequests() {
         scope.launch {
             isLoading = true
-            requests = if (isAdmin) repository.getAllRequests() else repository.getRequestsForUser(uid)
-            isLoading = false
+            try {
+                requests = if (isAdmin) repository.getAllRequests() else repository.getRequestsForUser(uid)
+            } finally {
+                isLoading = false
+            }
         }
     }
 
@@ -61,13 +66,10 @@ fun LeaveManagementScreen(
         scope.launch { snackbarHostState.showSnackbar(text) }
     }
 
-    val selectedDays = remember(fromDate, toDate) {
-        runCatching {
-            val from = LocalDate.parse(fromDate.trim(), DateTimeFormatter.ISO_LOCAL_DATE)
-            val to = LocalDate.parse(toDate.trim(), DateTimeFormatter.ISO_LOCAL_DATE)
-            if (to.isBefore(from)) 0 else ChronoUnit.DAYS.between(from, to).toInt() + 1
-        }.getOrDefault(0)
-    }
+    val selectedDays = calculateLeaveDays(fromDate, toDate)
+    val pendingCount = requests.count { it.status == "PENDING" }
+    val approvedCount = requests.count { it.status == "APPROVED" }
+    val rejectedCount = requests.count { it.status == "REJECTED" }
 
     LaunchedEffect(uid, isAdmin) { loadRequests() }
 
@@ -102,11 +104,32 @@ fun LeaveManagementScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            item {
+                LeaveSummaryCard(
+                    total = requests.size,
+                    pending = pendingCount,
+                    approved = approvedCount,
+                    rejected = rejectedCount,
+                    isAdmin = isAdmin
+                )
+            }
+
             if (!isAdmin) {
                 item {
-                    Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = ShahWhite)) {
-                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Text("Apply for Leave", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = ShahBlack)
+                    Card(
+                        shape = RoundedCornerShape(18.dp),
+                        colors = CardDefaults.cardColors(containerColor = ShahWhite)
+                    ) {
+                        Column(
+                            Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Text(
+                                "Apply for Leave",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = ShahBlack
+                            )
 
                             ExposedDropdownMenuBox(
                                 expanded = typeExpanded,
@@ -127,7 +150,10 @@ fun LeaveManagementScreen(
                                     listOf("CASUAL", "SICK", "PAID", "UNPAID", "EMERGENCY").forEach { type ->
                                         DropdownMenuItem(
                                             text = { Text(type) },
-                                            onClick = { leaveType = type; typeExpanded = false }
+                                            onClick = {
+                                                leaveType = type
+                                                typeExpanded = false
+                                            }
                                         )
                                     }
                                 }
@@ -168,6 +194,7 @@ fun LeaveManagementScreen(
                             )
 
                             Button(
+                                enabled = !isSubmitting,
                                 onClick = {
                                     if (fromDate.isBlank() || toDate.isBlank() || reason.isBlank()) {
                                         showMessage("From date, To date and reason are required.")
@@ -177,7 +204,9 @@ fun LeaveManagementScreen(
                                         showMessage("Please enter valid dates in yyyy-MM-dd format.")
                                         return@Button
                                     }
+
                                     scope.launch {
+                                        isSubmitting = true
                                         try {
                                             repository.submitRequest(
                                                 LeaveRequestModel(
@@ -198,14 +227,23 @@ fun LeaveManagementScreen(
                                             loadRequests()
                                         } catch (e: Exception) {
                                             showMessage(e.message ?: "Unable to submit leave request.")
+                                        } finally {
+                                            isSubmitting = false
                                         }
                                     }
                                 },
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Icon(Icons.Default.Send, null)
+                                if (isSubmitting) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(18.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    Icon(Icons.Default.Send, null)
+                                }
                                 Spacer(Modifier.width(8.dp))
-                                Text("Submit Leave Request")
+                                Text(if (isSubmitting) "Submitting..." else "Submit Leave Request")
                             }
                         }
                     }
@@ -214,7 +252,7 @@ fun LeaveManagementScreen(
 
             item {
                 Text(
-                    if (isAdmin) "All Leave Requests" else "My Leave Requests",
+                    if (isAdmin) "All Leave Requests" else "My Leave History",
                     fontSize = 17.sp,
                     fontWeight = FontWeight.Bold,
                     color = ShahBlack
@@ -223,14 +261,23 @@ fun LeaveManagementScreen(
 
             if (isLoading) {
                 item {
-                    Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                    Box(
+                        Modifier.fillMaxWidth().padding(24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
                         CircularProgressIndicator()
                     }
                 }
             } else if (requests.isEmpty()) {
                 item {
-                    Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = ShahWhite)) {
-                        Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = ShahWhite)
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(18.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Icon(Icons.Default.Info, null, tint = ShahGreen)
                             Spacer(Modifier.width(10.dp))
                             Text(
@@ -256,10 +303,15 @@ fun LeaveManagementScreen(
                                 }
                             }
                         },
-                        onCancel = { id ->
+                        onCancel = { id, wasApproved ->
                             scope.launch {
                                 try {
-                                    repository.updateStatus(id, "CANCELLED", userName, "Cancelled by employee")
+                                    repository.updateStatus(
+                                        id,
+                                        "CANCELLED",
+                                        userName,
+                                        if (wasApproved) "Approved leave cancelled by employee" else "Cancelled by employee"
+                                    )
                                     showMessage("Leave request cancelled.")
                                     loadRequests()
                                 } catch (e: Exception) {
@@ -275,11 +327,48 @@ fun LeaveManagementScreen(
 }
 
 @Composable
+private fun LeaveSummaryCard(
+    total: Int,
+    pending: Int,
+    approved: Int,
+    rejected: Int,
+    isAdmin: Boolean
+) {
+    Card(
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = ShahWhite)
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(
+                if (isAdmin) "Leave Overview" else "My Leave Overview",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = ShahBlack
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                LeaveStat("Total", total, ShahBlack, Modifier.weight(1f))
+                LeaveStat("Pending", pending, Color(0xFFF57C00), Modifier.weight(1f))
+                LeaveStat("Approved", approved, Color(0xFF2E7D32), Modifier.weight(1f))
+                LeaveStat("Rejected", rejected, Color(0xFFC62828), Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun LeaveStat(label: String, value: Int, color: Color, modifier: Modifier) {
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(value.toString(), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = color)
+        Text(label, fontSize = 10.sp, color = ShahMediumGrey)
+    }
+}
+
+@Composable
 private fun LeaveRequestCard(
     request: LeaveRequestModel,
     isAdmin: Boolean,
     onStatusChange: (String, String, String) -> Unit,
-    onCancel: (String) -> Unit
+    onCancel: (String, Boolean) -> Unit
 ) {
     val statusColor = when (request.status) {
         "APPROVED" -> Color(0xFF2E7D32)
@@ -287,10 +376,16 @@ private fun LeaveRequestCard(
         "CANCELLED" -> Color(0xFF616161)
         else -> Color(0xFFF57C00)
     }
-    var adminRemark by remember(request.id) { mutableStateOf(request.adminRemark) }
+    var adminRemark by remember(request.id, request.adminRemark) {
+        mutableStateOf(request.adminRemark)
+    }
+    val days = calculateLeaveDays(request.fromDate, request.toDate)
 
-    Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = ShahWhite)) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = ShahWhite)
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.EventBusy, null, tint = ShahGreen)
                 Spacer(Modifier.width(8.dp))
@@ -299,16 +394,24 @@ private fun LeaveRequestCard(
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f)
                 )
-                Text(request.status, color = statusColor, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Text(
+                    request.status,
+                    color = statusColor,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp
+                )
             }
 
             Text(
-                "${request.leaveType} • ${request.fromDate} → ${request.toDate}",
+                "${request.leaveType} • ${request.fromDate} → ${request.toDate} • $days day${if (days == 1) "" else "s"}",
                 fontSize = 13.sp,
                 color = ShahMediumGrey
             )
             Text(request.reason, fontSize = 13.sp, color = ShahBlack)
 
+            if (request.approvedBy.isNotBlank() && request.status == "APPROVED") {
+                Text("Approved by: ${request.approvedBy}", fontSize = 12.sp, color = ShahMediumGrey)
+            }
             if (request.adminRemark.isNotBlank()) {
                 Text("Admin remark: ${request.adminRemark}", fontSize = 12.sp, color = ShahMediumGrey)
             }
@@ -321,7 +424,10 @@ private fun LeaveRequestCard(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     OutlinedButton(
                         onClick = { onStatusChange(request.id, "REJECTED", adminRemark) },
                         modifier = Modifier.weight(1f)
@@ -341,16 +447,24 @@ private fun LeaveRequestCard(
                 }
             }
 
-            if (!isAdmin && request.status == "PENDING") {
+            if (!isAdmin && (request.status == "PENDING" || request.status == "APPROVED")) {
                 OutlinedButton(
-                    onClick = { onCancel(request.id) },
+                    onClick = { onCancel(request.id, request.status == "APPROVED") },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Icon(Icons.Default.Cancel, null)
                     Spacer(Modifier.width(5.dp))
-                    Text("Cancel Request")
+                    Text(if (request.status == "APPROVED") "Cancel Approved Leave" else "Cancel Request")
                 }
             }
         }
     }
+}
+
+private fun calculateLeaveDays(fromDate: String, toDate: String): Int {
+    return runCatching {
+        val from = LocalDate.parse(fromDate.trim(), DateTimeFormatter.ISO_LOCAL_DATE)
+        val to = LocalDate.parse(toDate.trim(), DateTimeFormatter.ISO_LOCAL_DATE)
+        if (to.isBefore(from)) 0 else ChronoUnit.DAYS.between(from, to).toInt() + 1
+    }.getOrDefault(0)
 }
