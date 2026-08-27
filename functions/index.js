@@ -12,6 +12,8 @@ exports.sendShahErpNotification = onDocumentCreated("notifications/{notification
   if (!snapshot) return;
 
   const data = snapshot.data() || {};
+  if (data.fanout === true) return;
+
   const title = String(data.title || "Shah ERP");
   const message = String(data.message || "New notification");
   const notificationId = event.params.notificationId;
@@ -22,6 +24,19 @@ exports.sendShahErpNotification = onDocumentCreated("notifications/{notification
   } else if (String(data.targetRole || "").toLowerCase() === "admin") {
     const admins = await db.collection("users").where("role", "==", "admin").get();
     recipients = admins.docs.map((doc) => doc.id).filter(Boolean);
+
+    const batch = db.batch();
+    recipients.forEach((uid) => {
+      const ref = db.collection("notifications").doc();
+      batch.set(ref, {
+        ...data,
+        recipientUid: uid,
+        fanout: true,
+        sourceNotificationId: notificationId,
+        createdAt: data.createdAt || FieldValue.serverTimestamp()
+      });
+    });
+    if (recipients.length) await batch.commit();
   }
 
   recipients = [...new Set(recipients)];
