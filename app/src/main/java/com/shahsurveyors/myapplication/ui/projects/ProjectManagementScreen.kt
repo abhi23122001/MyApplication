@@ -19,7 +19,15 @@ import androidx.compose.ui.unit.sp
 import com.google.firebase.firestore.FirebaseFirestore
 import com.shahsurveyors.myapplication.ui.theme.*
 
-private data class ProjectItem(val id: String = "", val name: String = "", val client: String = "", val location: String = "", val status: String = "Active")
+private data class ProjectItem(
+    val id: String = "",
+    val name: String = "",
+    val client: String = "",
+    val location: String = "",
+    val status: String = "Active"
+)
+
+private val projectStatuses = listOf("Active", "Started", "Stopped", "Completed")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -30,6 +38,8 @@ fun ProjectManagementScreen(onBack: () -> Unit) {
     var client by remember { mutableStateOf("") }
     var location by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
+    var expandedProjectId by remember { mutableStateOf<String?>(null) }
+    var updatingProjectId by remember { mutableStateOf<String?>(null) }
 
     fun loadProjects() {
         db.collection("projects").get()
@@ -45,6 +55,28 @@ fun ProjectManagementScreen(onBack: () -> Unit) {
                 }
             }
             .addOnFailureListener { error = it.message ?: "Unable to load projects" }
+    }
+
+    fun updateProjectStatus(project: ProjectItem, newStatus: String) {
+        if (project.id.isBlank() || project.status == newStatus) {
+            expandedProjectId = null
+            return
+        }
+        updatingProjectId = project.id
+        db.collection("projects").document(project.id)
+            .update("status", newStatus)
+            .addOnSuccessListener {
+                projects = projects.map { item ->
+                    if (item.id == project.id) item.copy(status = newStatus) else item
+                }
+                expandedProjectId = null
+                updatingProjectId = null
+                error = null
+            }
+            .addOnFailureListener {
+                updatingProjectId = null
+                error = it.message ?: "Unable to update project status"
+            }
     }
 
     fun addProject() {
@@ -134,7 +166,28 @@ fun ProjectManagementScreen(onBack: () -> Unit) {
                         if (project.location.isNotBlank()) Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.LocationOn, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(project.location)
                         }
-                        AssistChip(onClick = {}, label = { Text(project.status) })
+
+                        Box {
+                            AssistChip(
+                                onClick = { expandedProjectId = project.id },
+                                enabled = updatingProjectId != project.id,
+                                label = {
+                                    Text(if (updatingProjectId == project.id) "Updating..." else project.status)
+                                }
+                            )
+                            DropdownMenu(
+                                expanded = expandedProjectId == project.id,
+                                onDismissRequest = { expandedProjectId = null }
+                            ) {
+                                projectStatuses.forEach { status ->
+                                    DropdownMenuItem(
+                                        text = { Text(status) },
+                                        onClick = { updateProjectStatus(project, status) },
+                                        enabled = status != project.status && updatingProjectId != project.id
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
