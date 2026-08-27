@@ -51,7 +51,13 @@ private fun androidx.compose.foundation.lazy.LazyListScope.moduleSection(title: 
 
 @Composable
 fun ModuleItem(module: ModuleData, onNavigate: (String) -> Unit) {
-    Card(Modifier.fillMaxWidth().clickable { onNavigate(module.route) }, RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = ShahWhite), elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
+    val safeRoute = when (module.route) {
+        "quotes" -> "billing"
+        "reports_finance" -> "billing"
+        "reports_work" -> "dsr"
+        else -> module.route
+    }
+    Card(Modifier.fillMaxWidth().clickable { onNavigate(safeRoute) }, RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = ShahWhite), elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
         Row(Modifier.padding(horizontal = 15.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
             Surface(shape = RoundedCornerShape(12.dp), color = ShahGreen.copy(alpha = .10f)) { Icon(module.icon, module.name, tint = ShahGreen, modifier = Modifier.padding(10.dp).size(22.dp)) }
             Spacer(Modifier.width(13.dp)); Column(Modifier.weight(1f)) { Text(module.name, fontWeight = FontWeight.Bold, color = ShahBlack, fontSize = 14.sp); Spacer(Modifier.height(3.dp)); Text(module.description, fontSize = 11.sp, color = ShahMediumGrey) }
