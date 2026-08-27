@@ -38,12 +38,14 @@ data class BillingDocumentEntity(
     val date: Long = System.currentTimeMillis(),
     val inquiryDate: Long? = null,
     val validUntil: Long? = null,
-    val gstType: String = "CGST_SGST", // CGST_SGST, IGST, NONE
+    val gstType: String = "CGST_SGST",
     val gstPercentage: Double = 18.0,
     val subTotal: Double = 0.0,
     val taxAmount: Double = 0.0,
     val grandTotal: Double = 0.0,
     val status: String = "DRAFT",
+    val paymentStatus: String = "UNPAID",
+    val paidAmount: Double = 0.0,
     val termsAndConditions: String = "",
     val referenceDocNumber: String? = null
 )
