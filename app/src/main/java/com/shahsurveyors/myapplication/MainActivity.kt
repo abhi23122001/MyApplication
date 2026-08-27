@@ -37,6 +37,12 @@ import com.shahsurveyors.myapplication.ui.leave.*
 import com.shahsurveyors.myapplication.ui.more.MoreModulesScreen
 import com.shahsurveyors.myapplication.ui.projects.ProjectManagementScreen
 import com.shahsurveyors.myapplication.ui.marketing.MarketingScreen
+import com.shahsurveyors.myapplication.ui.ops.DSRViewModel
+import com.shahsurveyors.myapplication.ui.ops.DSRViewModelFactory
+import com.shahsurveyors.myapplication.ui.ops.DailyStatusReportScreen
+import com.shahsurveyors.myapplication.ui.ops.ExpenseViewModel
+import com.shahsurveyors.myapplication.ui.ops.ExpenseViewModelFactory
+import com.shahsurveyors.myapplication.ui.ops.ExpenseClaimsScreen
 import com.shahsurveyors.myapplication.ui.reports.*
 import com.shahsurveyors.myapplication.ui.splash.SplashScreen
 import com.shahsurveyors.myapplication.ui.survey.SurveyCalculatorScreen
