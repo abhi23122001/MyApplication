@@ -32,6 +32,7 @@ import com.shahsurveyors.myapplication.ui.chat.RadarScreen
 import com.shahsurveyors.myapplication.ui.crm.*
 import com.shahsurveyors.myapplication.ui.dashboard.*
 import com.shahsurveyors.myapplication.ui.equipment.*
+import com.shahsurveyors.myapplication.ui.finance.*
 import com.shahsurveyors.myapplication.ui.leave.*
 import com.shahsurveyors.myapplication.ui.more.MoreModulesScreen
 import com.shahsurveyors.myapplication.ui.ops.*
