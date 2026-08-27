@@ -56,99 +56,48 @@ class AdminViewModel(
     fun fetchAdminData() {
         if (isLoading) return
         viewModelScope.launch {
-            isLoading = true
-            errorMessage = null
+            isLoading = true; errorMessage = null
             try {
                 val users = userRepository.getAllEmployees()
-                pendingUsers = users.filter { !it.approved }
-                allEmployees = users
-                allExpenses = expenseRepository.getAllExpenses()
-                pendingExpenses = allExpenses.filter { it.status == "PENDING" }
+                pendingUsers = users.filter { !it.approved }; allEmployees = users
+                allExpenses = expenseRepository.getAllExpenses(); pendingExpenses = allExpenses.filter { it.status == "PENDING" }
                 pendingLeaves = leaveRepository.getAllRequests().filter { it.status == "PENDING" }
                 pendingAttendanceCorrections = attendanceCorrectionRepository.getPendingRequests()
-                pendingSalaryAdvances = advanceSalaryRepository.getPending()
-                loadTodayAttendance()
-            } catch (e: Exception) {
-                e.printStackTrace()
-                errorMessage = e.localizedMessage ?: "Unable to load admin data"
-            } finally { isLoading = false }
+                pendingSalaryAdvances = advanceSalaryRepository.getPending(); loadTodayAttendance()
+            } catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to load admin data" }
+            finally { isLoading = false }
         }
     }
 
     private suspend fun loadTodayAttendance() {
         val attendanceList = try { attendanceRepository.getTodayAllAttendance() } catch (_: Exception) { emptyList() }
         val sortedAttendance = attendanceList.sortedByDescending { it.punchInTime?.seconds ?: 0L }
-        attendanceSummary = sortedAttendance
-        presentCount = sortedAttendance.size
+        attendanceSummary = sortedAttendance; presentCount = sortedAttendance.size
         val existingUids = allEmployees.map { it.uid }.toHashSet()
         val missingProfiles = sortedAttendance.filter { it.uid.isNotBlank() && it.uid !in existingUids }.map { UserProfile(uid = it.uid, name = it.userName, role = "employee", approved = true, active = true) }
         if (missingProfiles.isNotEmpty()) allEmployees = allEmployees + missingProfiles
         absentCount = (allEmployees.count { it.active } - presentCount).coerceAtLeast(0)
     }
 
-    fun refreshAttendance() {
-        if (isLoading) return
-        viewModelScope.launch {
-            isLoading = true
-            try { allEmployees = userRepository.getAllEmployees(); loadTodayAttendance() }
-            catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to refresh attendance" }
-            finally { isLoading = false }
-        }
-    }
-
-    fun approveUser(uid: String, access: String) {
-        viewModelScope.launch { try { userRepository.updateUserStatus(uid, true, true); fetchAdminData() } catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to approve user" } }
-    }
-
-    fun setEmployeeActive(uid: String, active: Boolean) {
-        viewModelScope.launch { try { userRepository.updateUserStatus(uid, true, active); fetchAdminData() } catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to update employee status" } }
-    }
+    fun refreshAttendance() { if (isLoading) return; viewModelScope.launch { isLoading = true; try { allEmployees = userRepository.getAllEmployees(); loadTodayAttendance() } catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to refresh attendance" } finally { isLoading = false } } }
+    fun approveUser(uid: String, access: String) { viewModelScope.launch { try { userRepository.updateUserStatus(uid, true, true); fetchAdminData() } catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to approve user" } } }
+    fun setEmployeeActive(uid: String, active: Boolean) { viewModelScope.launch { try { userRepository.updateUserStatus(uid, true, active); fetchAdminData() } catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to update employee status" } } }
 
     fun approveExpense(id: String, status: String, remark: String = "") {
-        viewModelScope.launch {
-            try {
-                val adminUid = FirebaseAuth.getInstance().currentUser?.uid ?: "ADMIN"
-                val adminName = allEmployees.firstOrNull { it.uid == adminUid }?.name ?: "Admin"
-                expenseRepository.updateExpenseReview(id, status, remark, adminUid, adminName)
-                fetchAdminData()
-            } catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to update expense" }
-        }
+        viewModelScope.launch { try {
+            val adminUid = FirebaseAuth.getInstance().currentUser?.uid ?: "ADMIN"
+            val adminName = allEmployees.firstOrNull { it.uid == adminUid }?.name ?: "Admin"
+            expenseRepository.updateExpenseReview(id, status, remark, adminUid, adminName); fetchAdminData()
+        } catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to update expense" } }
     }
 
-    fun markExpensePaid(id: String) {
-        viewModelScope.launch {
-            try { expenseRepository.markExpensePaid(id); fetchAdminData() }
-            catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to mark expense paid" }
-        }
-    }
+    fun markExpensePaid(id: String) { viewModelScope.launch { try { expenseRepository.markExpensePaid(id); fetchAdminData() } catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to mark expense paid" } } }
 
-    fun reviewLeave(id: String, approved: Boolean, remark: String = "") {
-        viewModelScope.launch {
-            try {
-                val adminUid = FirebaseAuth.getInstance().currentUser?.uid ?: "ADMIN"
-                leaveRepository.updateStatus(id, if (approved) "APPROVED" else "REJECTED", adminUid)
-                if (remark.isNotBlank()) firestore.collection("leaveRequests").document(id).update("adminRemark", remark)
-                fetchAdminData()
-            } catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to review leave" }
-        }
-    }
+    fun markExpenseUnpaid(id: String) { viewModelScope.launch { try { expenseRepository.markExpenseUnpaid(id); fetchAdminData() } catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to mark expense unpaid" } } }
 
-    fun reviewAttendanceCorrection(id: String, approved: Boolean, remark: String = "") {
-        viewModelScope.launch { try { val adminUid = FirebaseAuth.getInstance().currentUser?.uid ?: "ADMIN"; attendanceCorrectionRepository.reviewRequest(id, approved, adminUid, remark); fetchAdminData() } catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to review attendance correction" } }
-    }
-
-    fun reviewSalaryAdvance(id: String, approved: Boolean, remark: String = "") {
-        viewModelScope.launch {
-            try {
-                val adminUid = FirebaseAuth.getInstance().currentUser?.uid ?: "ADMIN"
-                val adminName = allEmployees.firstOrNull { it.uid == adminUid }?.name ?: "Admin"
-                val request = pendingSalaryAdvances.firstOrNull { it.id == id }
-                advanceSalaryRepository.updateDecision(id, if (approved) "APPROVED" else "REJECTED", if (approved) (request?.amount ?: 0.0) else 0.0, adminUid, if (remark.isBlank()) adminName else "$adminName - $remark")
-                fetchAdminData()
-            } catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to review salary advance" }
-        }
-    }
-
+    fun reviewLeave(id: String, approved: Boolean, remark: String = "") { viewModelScope.launch { try { val adminUid = FirebaseAuth.getInstance().currentUser?.uid ?: "ADMIN"; leaveRepository.updateStatus(id, if (approved) "APPROVED" else "REJECTED", adminUid); if (remark.isNotBlank()) firestore.collection("leaveRequests").document(id).update("adminRemark", remark); fetchAdminData() } catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to review leave" } } }
+    fun reviewAttendanceCorrection(id: String, approved: Boolean, remark: String = "") { viewModelScope.launch { try { val adminUid = FirebaseAuth.getInstance().currentUser?.uid ?: "ADMIN"; attendanceCorrectionRepository.reviewRequest(id, approved, adminUid, remark); fetchAdminData() } catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to review attendance correction" } } }
+    fun reviewSalaryAdvance(id: String, approved: Boolean, remark: String = "") { viewModelScope.launch { try { val adminUid = FirebaseAuth.getInstance().currentUser?.uid ?: "ADMIN"; val adminName = allEmployees.firstOrNull { it.uid == adminUid }?.name ?: "Admin"; val request = pendingSalaryAdvances.firstOrNull { it.id == id }; advanceSalaryRepository.updateDecision(id, if (approved) "APPROVED" else "REJECTED", if (approved) (request?.amount ?: 0.0) else 0.0, adminUid, if (remark.isBlank()) adminName else "$adminName - $remark"); fetchAdminData() } catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to review salary advance" } } }
     fun updateCompanyProfile(profile: CompanyProfile) { viewModelScope.launch { try { billingRepository.updateCompanyProfile(profile) } catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to update company profile" } } }
     fun updateBankDetails(details: BankDetails) { viewModelScope.launch { try { billingRepository.updateBankDetails(details) } catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to update bank details" } } }
     fun saveTerm(term: TermConditionEntity) { viewModelScope.launch { try { billingRepository.saveTerm(term) } catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to save term" } } }
