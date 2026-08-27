@@ -59,11 +59,6 @@ class AttendanceCorrectionRepository(
         if (approved) applyApprovedCorrection(request)
     }
 
-    /**
-     * An approved correction is the final attendance decision. It must change the
-     * attendance document used by payroll, otherwise approval would only change
-     * the request status and salary would still use the old punch data.
-     */
     private suspend fun applyApprovedCorrection(request: AttendanceCorrectionRequest) {
         val docId = "${request.uid}_${request.attendanceDate}"
         val ref = attendance.document(docId)
@@ -83,6 +78,7 @@ class AttendanceCorrectionRepository(
             "status" to "PRESENT",
             "lateMinutes" to 0,
             "earlyOutMinutes" to 0,
+            "overtimeMinutes" to 0,
             "isLate" to false,
             "isEarlyOut" to false,
             "punchOutMissing" to false
