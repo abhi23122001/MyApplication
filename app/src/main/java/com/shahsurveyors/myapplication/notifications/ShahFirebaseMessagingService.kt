@@ -7,14 +7,28 @@ import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.shahsurveyors.myapplication.MainActivity
+import com.shahsurveyors.myapplication.R
 
 class ShahFirebaseMessagingService : FirebaseMessagingService() {
+    private fun saveToken(token: String) {
+        getSharedPreferences("fcm", MODE_PRIVATE).edit().putString("token", token).apply()
+        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
+        FirebaseFirestore.getInstance().collection("users").document(uid).set(
+            mapOf("fcmToken" to token, "updatedAt" to FieldValue.serverTimestamp()),
+            SetOptions.merge()
+        )
+    }
+
     override fun onNewToken(token: String) {
         super.onNewToken(token)
-        getSharedPreferences("fcm", MODE_PRIVATE).edit().putString("token", token).apply()
+        saveToken(token)
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
@@ -30,7 +44,7 @@ class ShahFirebaseMessagingService : FirebaseMessagingService() {
         val intent = Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
         val pending = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val notification = NotificationCompat.Builder(this, channelId)
-            .setSmallIcon(com.shahsurveyors.myapplication.R.drawable.app_logo)
+            .setSmallIcon(R.drawable.app_logo)
             .setContentTitle(title)
             .setContentText(body)
             .setAutoCancel(true)
