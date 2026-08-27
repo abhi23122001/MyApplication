@@ -19,34 +19,46 @@ class AttendanceRepository(
         timeZone = TimeZone.getTimeZone("GMT+05:30")
     }.format(Date())
 
+    private fun documentId(uid: String, date: String): String = "${uid}_$date"
+
     suspend fun getTodayAttendance(uid: String): AttendanceRecord? {
         val today = getTodayDate()
-        val snapshot = attendanceCollection
-            .whereEqualTo("uid", uid)
-            .whereEqualTo("date", today)
-            .limit(1)
-            .get()
-            .await()
-        return snapshot.documents.firstOrNull()?.toObject(AttendanceRecord::class.java)
+        return attendanceCollection.document(documentId(uid, today)).get().await()
+            .toObject(AttendanceRecord::class.java)
     }
 
     suspend fun punchIn(record: AttendanceRecord) {
+        require(record.uid.isNotBlank()) { "Employee ID is required" }
         val today = getTodayDate()
-        val docId = "${record.uid}_$today"
-        attendanceCollection.document(docId).set(record.copy(id = docId, date = today)).await()
+        val docId = documentId(record.uid, today)
+        val ref = attendanceCollection.document(docId)
+        val existing = ref.get().await().toObject(AttendanceRecord::class.java)
+        if (existing != null) {
+            throw IllegalStateException("Today's attendance is already recorded")
+        }
+        ref.set(record.copy(id = docId, date = today)).await()
     }
 
     suspend fun punchOut(uid: String, lat: Double, lng: Double) {
+        require(uid.isNotBlank()) { "Employee ID is required" }
         val today = getTodayDate()
-        val docId = "${uid}_$today"
-        val document = attendanceCollection.document(docId).get().await()
-        val record = document.toObject(AttendanceRecord::class.java)
+        val docId = documentId(uid, today)
+        val ref = attendanceCollection.document(docId)
+        val record = ref.get().await().toObject(AttendanceRecord::class.java)
+            ?: throw IllegalStateException("Punch IN is required before Punch OUT")
+
+        if (record.punchInTime == null) {
+            throw IllegalStateException("Punch IN time is missing")
+        }
+        if (record.punchOutTime != null) {
+            throw IllegalStateException("Today's attendance is already completed")
+        }
+
         val punchOutTimestamp = com.google.firebase.Timestamp.now()
-        val workingMinutes = if (record?.punchInTime != null) {
-            ((punchOutTimestamp.toDate().time - record.punchInTime.toDate().time) / 60_000L)
-                .coerceAtLeast(0L).toInt()
-        } else 0
-        attendanceCollection.document(docId).update(
+        val workingMinutes = ((punchOutTimestamp.toDate().time - record.punchInTime.toDate().time) / 60_000L)
+            .coerceAtLeast(0L).toInt()
+
+        ref.update(
             mapOf(
                 "punchOutTime" to punchOutTimestamp,
                 "punchOutLat" to lat,
@@ -58,8 +70,7 @@ class AttendanceRepository(
     }
 
     suspend fun markPunchOutMissing(uid: String, date: String) {
-        val docId = "${uid}_$date"
-        attendanceCollection.document(docId).update(
+        attendanceCollection.document(documentId(uid, date)).update(
             mapOf("punchOutMissing" to true, "status" to "MISSING_PUNCH_OUT")
         ).await()
     }
@@ -73,8 +84,7 @@ class AttendanceRepository(
         overtimeMinutes: Int = 0,
         leaveRequestId: String = ""
     ) {
-        val docId = "${uid}_$date"
-        attendanceCollection.document(docId).update(
+        attendanceCollection.document(documentId(uid, date)).update(
             mapOf(
                 "status" to status,
                 "lateMinutes" to lateMinutes.coerceAtLeast(0),
@@ -88,13 +98,13 @@ class AttendanceRepository(
     }
 
     suspend fun getAttendanceHistory(uid: String, limit: Long = 30): List<AttendanceRecord> {
-        val snapshot = attendanceCollection
+        return attendanceCollection
             .whereEqualTo("uid", uid)
             .orderBy("punchInTime", Query.Direction.DESCENDING)
             .limit(limit)
             .get()
             .await()
-        return snapshot.toObjects(AttendanceRecord::class.java)
+            .toObjects(AttendanceRecord::class.java)
     }
 
     /** Returns only this employee's attendance records for a payroll month. */
@@ -108,17 +118,17 @@ class AttendanceRepository(
     }
 
     suspend fun getAllAttendance(limit: Long = 100): List<AttendanceRecord> {
-        val snapshot = attendanceCollection
+        return attendanceCollection
             .orderBy("punchInTime", Query.Direction.DESCENDING)
             .limit(limit)
             .get()
             .await()
-        return snapshot.toObjects(AttendanceRecord::class.java)
+            .toObjects(AttendanceRecord::class.java)
     }
 
     suspend fun getTodayAllAttendance(): List<AttendanceRecord> {
         val today = getTodayDate()
-        val snapshot = attendanceCollection.whereEqualTo("date", today).get().await()
-        return snapshot.toObjects(AttendanceRecord::class.java)
+        return attendanceCollection.whereEqualTo("date", today).get().await()
+            .toObjects(AttendanceRecord::class.java)
     }
 }
