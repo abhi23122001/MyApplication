@@ -14,6 +14,7 @@ class AttendanceRepository(
 ) {
 
     private val attendanceCollection = firestore.collection(FirebaseConstants.COLLECTION_ATTENDANCE)
+    private val notificationRepository = NotificationRepository(firestore)
 
     private fun getTodayDate(): String = SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH).apply {
         timeZone = TimeZone.getTimeZone("GMT+05:30")
@@ -37,6 +38,17 @@ class AttendanceRepository(
             throw IllegalStateException("Today's attendance is already recorded")
         }
         ref.set(record.copy(id = docId, date = today)).await()
+        runCatching {
+            notificationRepository.createForAdmins(
+                type = "ATTENDANCE_PUNCH_IN",
+                title = "Punch In Request",
+                message = "${record.userName.ifBlank { "Employee" }} punched in at ${record.siteName.ifBlank { "current location" }}.",
+                actorUid = record.uid,
+                actorName = record.userName,
+                referenceId = docId,
+                route = "attendance"
+            )
+        }
     }
 
     suspend fun punchOut(uid: String, lat: Double, lng: Double) {
@@ -67,6 +79,17 @@ class AttendanceRepository(
                 "punchOutMissing" to false
             )
         ).await()
+        runCatching {
+            notificationRepository.createForAdmins(
+                type = "ATTENDANCE_PUNCH_OUT",
+                title = "Punch Out Request",
+                message = "${record.userName.ifBlank { "Employee" }} punched out after $workingMinutes minutes.",
+                actorUid = record.uid,
+                actorName = record.userName,
+                referenceId = docId,
+                route = "attendance"
+            )
+        }
     }
 
     suspend fun markPunchOutMissing(uid: String, date: String) {
@@ -107,7 +130,6 @@ class AttendanceRepository(
             .toObjects(AttendanceRecord::class.java)
     }
 
-    /** Returns only this employee's attendance records for a payroll month. */
     suspend fun getAttendanceForMonth(uid: String, startDate: String, endDate: String): List<AttendanceRecord> {
         return attendanceCollection
             .whereEqualTo("uid", uid)
