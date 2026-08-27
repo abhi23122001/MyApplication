@@ -29,13 +29,19 @@ class UserRepository(
             .await()
     }
 
+    /**
+     * Returns active non-admin staff for admin operations such as recording
+     * leave on behalf of an employee. Do not rely on a single role value here:
+     * staff can be employee, surveyor, site_manager, marketing, etc.
+     */
     suspend fun getAllEmployees(): List<UserProfile> {
         return try {
-            val snapshot = usersCollection
-                .whereEqualTo("role", FirebaseConstants.ROLE_EMPLOYEE)
-                .get()
-                .await()
+            val snapshot = usersCollection.get().await()
             snapshot.toObjects(UserProfile::class.java)
+                .filter { it.uid.isNotBlank() }
+                .filter { it.active }
+                .filter { !it.role.equals(FirebaseConstants.ROLE_ADMIN, ignoreCase = true) }
+                .sortedBy { it.name.lowercase() }
         } catch (e: Exception) {
             emptyList()
         }
