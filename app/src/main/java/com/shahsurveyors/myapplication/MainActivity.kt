@@ -32,7 +32,6 @@ import com.shahsurveyors.myapplication.ui.chat.RadarScreen
 import com.shahsurveyors.myapplication.ui.crm.*
 import com.shahsurveyors.myapplication.ui.dashboard.*
 import com.shahsurveyors.myapplication.ui.equipment.*
-import com.shahsurveyors.myapplication.ui.finance.*
 import com.shahsurveyors.myapplication.ui.leave.*
 import com.shahsurveyors.myapplication.ui.more.MoreModulesScreen
 import com.shahsurveyors.myapplication.ui.ops.*
@@ -92,7 +91,8 @@ class MainActivity : ComponentActivity() {
                             composable("signup") { SignupScreen(viewModel = authViewModel, onBackToLogin = { navController.popBackStack() }) }
                             composable("dashboard") { DashboardScreen(viewModel = dashboardViewModel, userName = authViewModel.userName, userRole = authViewModel.userRole, userAccess = authViewModel.userAccess, onNavigateToAttendance = { navController.navigate("attendance") }, onNavigateToEquipment = { navController.navigate("equipment") }, onNavigateToTasks = { navController.navigate("tasks") }, onNavigateToSurvey = { navController.navigate("survey") }, onNavigateToChat = { navController.navigate("chat") }, onNavigateToAdmin = { navController.navigate("employees") }, onNavigateToBilling = { navController.navigate("billing") }, onNavigateToExpense = { navController.navigate("expense") }, onNavigateToDsr = { navController.navigate("dsr") }, onNavigateToClients = { navController.navigate("clients") }, onNavigateToProjects = { navController.navigate("projects") }, onNavigateToBroadcast = { navController.navigate("communication") }, isAdmin = authViewModel.userRole.equals("admin", ignoreCase = true), onRefresh = { dashboardViewModel.refresh() }) }
                             composable("attendance") { LaunchedEffect(authViewModel.currentUserUid) { authViewModel.currentUserUid?.let { attendanceViewModel.checkStatus(it) } }; AttendanceScreen(uid = authViewModel.currentUserUid ?: "", userName = authViewModel.userName) }
-                            composable("employees") { EmployeeManagementScreen(viewModel = adminViewModel, onBack = { navController.popBackStack() }) }
+                            composable("employees") { EmployeeManagementScreen(viewModel = adminViewModel, onBack = { navController.popBackStack() }, onPermissions = { navController.navigate("employee_permissions") }) }
+                            composable("employee_permissions") { EmployeePermissionsScreen(onBack = { navController.popBackStack() }) }
                             composable("leave") { LeaveManagementScreen(repository = leaveRepository, uid = authViewModel.currentUserUid ?: "", userName = authViewModel.userName, userRole = authViewModel.userRole, onBack = { navController.popBackStack() }) }
                             composable("advance_salary") { AdvanceSalaryScreen(repository = advanceSalaryRepository, uid = authViewModel.currentUserUid ?: "", userName = authViewModel.userName, onBack = { navController.popBackStack() }) }
                             composable("chat") { RadarScreen(onBack = { navController.popBackStack() }) }
