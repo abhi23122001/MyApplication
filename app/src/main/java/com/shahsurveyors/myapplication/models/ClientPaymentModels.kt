@@ -13,5 +13,6 @@ data class ClientPaymentRecord(
     val remark: String = "",
     val recordedByUid: String = "",
     val recordedByName: String = "",
-    val createdAt: Timestamp? = null
+    val createdAt: Timestamp? = null,
+    val type: String = "PAYMENT"
 )
