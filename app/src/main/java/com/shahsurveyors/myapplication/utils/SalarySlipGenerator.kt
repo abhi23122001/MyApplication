@@ -45,7 +45,8 @@ object SalarySlipGenerator {
         canvas.drawText("SALARY SLIP", 455f, 55f, headingPaint)
         canvas.drawLine(40f, 70f, 555f, 70f, linePaint)
 
-        val monthLabel = if (data.month.isBlank()) "${data.year}" else "${data.month}-${data.year}"
+        // SalaryData.month already contains YYYY-MM, so do not append the year twice.
+        val monthLabel = if (data.month.isBlank()) data.year.toString() else data.month
         canvas.drawText("Salary Month: $monthLabel", 40f, 95f, textPaint)
         canvas.drawText("Generated: ${SimpleDateFormat("dd/MM/yyyy", Locale.ENGLISH).format(Date())}", 390f, 95f, textPaint)
 
@@ -70,7 +71,7 @@ object SalarySlipGenerator {
 
         canvas.drawLine(40f, 420f, 555f, 420f, linePaint)
         canvas.drawText("DEDUCTIONS", 40f, 445f, headingPaint)
-        drawRow(canvas, textPaint, 470f, "Advance Salary", money(data.advances))
+        drawRow(canvas, textPaint, 470f, "Advance Salary Deduction", money(data.advances))
         val otherDeductions = (data.deductions - data.advances).coerceAtLeast(0.0)
         drawRow(canvas, textPaint, 490f, "Other Deductions", money(otherDeductions))
         drawRow(canvas, textPaint, 510f, "Total Deductions", money(data.deductions))
