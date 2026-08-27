@@ -114,11 +114,25 @@ class LeaveRepository(
                 ).await()
             }
 
-            STATUS_REJECTED, STATUS_CANCELLED -> {
+            STATUS_REJECTED -> {
                 requestRef.update(
                     mapOf(
-                        "status" to status,
-                        "approvedBy" to if (status == STATUS_REJECTED) actionBy else request.approvedBy,
+                        "status" to STATUS_REJECTED,
+                        "approvedBy" to actionBy,
+                        "adminRemark" to cleanedRemark,
+                        "updatedAt" to Timestamp.now()
+                    )
+                ).await()
+            }
+
+            STATUS_CANCELLED -> {
+                if (request.status == STATUS_APPROVED) {
+                    cancelApprovedLeaveAttendance(request)
+                }
+                requestRef.update(
+                    mapOf(
+                        "status" to STATUS_CANCELLED,
+                        "approvedBy" to request.approvedBy,
                         "adminRemark" to cleanedRemark,
                         "updatedAt" to Timestamp.now()
                     )
