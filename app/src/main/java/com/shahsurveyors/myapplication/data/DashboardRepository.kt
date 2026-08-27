@@ -1,7 +1,6 @@
 package com.shahsurveyors.myapplication.data
 
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Timestamp
 import com.shahsurveyors.myapplication.ui.dashboard.DashboardData
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
@@ -14,10 +13,12 @@ class DashboardRepository(
 ) {
     suspend fun getDashboardData(): DashboardData = withContext(Dispatchers.IO) {
         try {
-            val today = LocalDate.now(ZoneId.of("Asia/Kolkata"))
+            val zone = ZoneId.of("Asia/Kolkata")
+            val today = LocalDate.now(zone)
             val monthStart = today.withDayOfMonth(1)
-            val monthStartTimestamp = Timestamp(monthStart.atStartOfDay(ZoneId.of("Asia/Kolkata")).toInstant().epochSecond, 0)
-            val nextMonthTimestamp = Timestamp(today.plusMonths(1).withDayOfMonth(1).atStartOfDay(ZoneId.of("Asia/Kolkata")).toInstant().epochSecond, 0)
+            val nextMonthStart = monthStart.plusMonths(1)
+            val monthStartMillis = monthStart.atStartOfDay(zone).toInstant().toEpochMilli()
+            val nextMonthMillis = nextMonthStart.atStartOfDay(zone).toInstant().toEpochMilli()
 
             val users = firestore.collection(FirebaseConstants.COLLECTION_USERS).get().await().documents
             val employees = users.filter {
@@ -37,18 +38,20 @@ class DashboardRepository(
             val absentToday = (totalEmployees - presentToday - onLeaveToday).coerceAtLeast(0)
 
             val projects = firestore.collection(FirebaseConstants.COLLECTION_PROJECTS).get().await().documents
-            val activeProjects = projects.count {
-                (it.getString("status") ?: "ACTIVE").equals("ACTIVE", ignoreCase = true)
+            val activeProjectDocs = projects.filter {
+                (it.getString("status") ?: FirebaseConstants.STATUS_ACTIVE).equals(FirebaseConstants.STATUS_ACTIVE, ignoreCase = true)
             }
-            val activeProjectBudget = projects.filter {
-                (it.getString("status") ?: "ACTIVE").equals("ACTIVE", ignoreCase = true)
-            }.sumOf { it.getDouble("budget") ?: 0.0 }
+            val activeProjects = activeProjectDocs.size
+            val activeProjectBudget = activeProjectDocs.sumOf { it.getDouble("budget") ?: 0.0 }
 
             val expenses = firestore.collection(FirebaseConstants.COLLECTION_EXPENSES).get().await().documents
-            val monthlyExpenses = expenses.filter { doc ->
-                val date = doc.getTimestamp("date")
-                date != null && date >= monthStartTimestamp && date < nextMonthTimestamp
-            }.sumOf { it.getDouble("amount") ?: 0.0 }
+            val monthlyExpenses = expenses.sumOf { doc ->
+                val timestamp = doc.getTimestamp("date") ?: return@sumOf 0.0
+                val millis = timestamp.toDate().time
+                if (millis >= monthStartMillis && millis < nextMonthMillis) {
+                    doc.getDouble("amount") ?: 0.0
+                } else 0.0
+            }
 
             val salaryProfiles = firestore.collection("salaryProfiles")
                 .whereEqualTo("active", true).get().await().documents
@@ -61,8 +64,6 @@ class DashboardRepository(
                 }
             }
 
-            val estimatedProfit = activeProjectBudget - monthlyExpenses - salaryLiability
-
             DashboardData(
                 noticeMessage = "Maintain project, expense and attendance records daily.",
                 totalEmployees = totalEmployees,
@@ -72,7 +73,7 @@ class DashboardRepository(
                 activeProjects = activeProjects,
                 monthlyExpenses = monthlyExpenses,
                 salaryLiability = salaryLiability,
-                estimatedProfit = estimatedProfit
+                estimatedProfit = activeProjectBudget - monthlyExpenses - salaryLiability
             )
         } catch (e: Exception) {
             e.printStackTrace()
