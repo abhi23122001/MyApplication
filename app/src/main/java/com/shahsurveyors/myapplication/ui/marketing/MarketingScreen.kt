@@ -8,14 +8,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.google.firebase.firestore.FirebaseFirestore
-import kotlinx.coroutines.launch
 
 private data class MarketingItem(val id: String = "", val title: String = "", val client: String = "", val status: String = "Active", val notes: String = "")
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MarketingScreen(onBack: () -> Unit) {
     val db = remember { FirebaseFirestore.getInstance() }
-    val scope = rememberCoroutineScope()
     var items by remember { mutableStateOf<List<MarketingItem>>(emptyList()) }
     var title by remember { mutableStateOf("") }
     var client by remember { mutableStateOf("") }
@@ -25,17 +24,16 @@ fun MarketingScreen(onBack: () -> Unit) {
     fun load() {
         db.collection("marketing").get().addOnSuccessListener { snap ->
             items = snap.documents.map { d -> MarketingItem(d.id, d.getString("title") ?: "", d.getString("client") ?: "", d.getString("status") ?: "Active", d.getString("notes") ?: "") }
-        }.addOnFailureListener { error = it.message }
+        }.addOnFailureListener { error = it.message ?: "Unable to load marketing data" }
     }
     LaunchedEffect(Unit) { load() }
 
     Scaffold(topBar = { TopAppBar(title = { Text("Marketing") }, navigationIcon = { TextButton(onClick = onBack) { Text("Back") } }) }, floatingActionButton = {
         FloatingActionButton(onClick = {
             if (title.isBlank()) { error = "Title is required"; return@FloatingActionButton }
-            val ref = db.collection("marketing").document()
-            ref.set(mapOf("title" to title.trim(), "client" to client.trim(), "notes" to notes.trim(), "status" to "Active"))
-                .addOnSuccessListener { title = ""; client = ""; notes = ""; load() }
-                .addOnFailureListener { error = it.message }
+            db.collection("marketing").document().set(mapOf("title" to title.trim(), "client" to client.trim(), "notes" to notes.trim(), "status" to "Active"))
+                .addOnSuccessListener { title = ""; client = ""; notes = ""; error = null; load() }
+                .addOnFailureListener { error = it.message ?: "Unable to save marketing activity" }
         }) { Text("+") }
     }) { pad ->
         LazyColumn(modifier = Modifier.fillMaxSize().padding(pad).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
