@@ -6,7 +6,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.shahsurveyors.myapplication.data.*
@@ -80,8 +79,9 @@ class AdminViewModel(
     }
 
     fun refreshAttendance() { if (isLoading) return; viewModelScope.launch { isLoading = true; try { allEmployees = userRepository.getAllEmployees(); loadTodayAttendance() } catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to refresh attendance" } finally { isLoading = false } } }
-    fun approveUser(uid: String, access: String) { viewModelScope.launch { try { userRepository.updateUserStatus(uid, true, true); fetchAdminData() } catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to approve user" } } }
+    fun approveUser(uid: String, access: String) { viewModelScope.launch { try { userRepository.updateUserStatus(uid, true, true); if (access.isNotBlank()) userRepository.updateUserAccess(uid, access); fetchAdminData() } catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to approve user" } } }
     fun setEmployeeActive(uid: String, active: Boolean) { viewModelScope.launch { try { userRepository.updateUserStatus(uid, true, active); fetchAdminData() } catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to update employee status" } } }
+    fun updateEmployeeAccess(uid: String, access: String) { viewModelScope.launch { try { userRepository.updateUserAccess(uid, access); fetchAdminData() } catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to update employee access" } } }
 
     fun approveExpense(id: String, status: String, remark: String = "") {
         viewModelScope.launch { try {
@@ -90,11 +90,8 @@ class AdminViewModel(
             expenseRepository.updateExpenseReview(id, status, remark, adminUid, adminName); fetchAdminData()
         } catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to update expense" } }
     }
-
     fun markExpensePaid(id: String) { viewModelScope.launch { try { expenseRepository.markExpensePaid(id); fetchAdminData() } catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to mark expense paid" } } }
-
     fun markExpenseUnpaid(id: String) { viewModelScope.launch { try { expenseRepository.markExpenseUnpaid(id); fetchAdminData() } catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to mark expense unpaid" } } }
-
     fun reviewLeave(id: String, approved: Boolean, remark: String = "") { viewModelScope.launch { try { val adminUid = FirebaseAuth.getInstance().currentUser?.uid ?: "ADMIN"; leaveRepository.updateStatus(id, if (approved) "APPROVED" else "REJECTED", adminUid); if (remark.isNotBlank()) firestore.collection("leaveRequests").document(id).update("adminRemark", remark); fetchAdminData() } catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to review leave" } } }
     fun reviewAttendanceCorrection(id: String, approved: Boolean, remark: String = "") { viewModelScope.launch { try { val adminUid = FirebaseAuth.getInstance().currentUser?.uid ?: "ADMIN"; attendanceCorrectionRepository.reviewRequest(id, approved, adminUid, remark); fetchAdminData() } catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to review attendance correction" } } }
     fun reviewSalaryAdvance(id: String, approved: Boolean, remark: String = "") { viewModelScope.launch { try { val adminUid = FirebaseAuth.getInstance().currentUser?.uid ?: "ADMIN"; val adminName = allEmployees.firstOrNull { it.uid == adminUid }?.name ?: "Admin"; val request = pendingSalaryAdvances.firstOrNull { it.id == id }; advanceSalaryRepository.updateDecision(id, if (approved) "APPROVED" else "REJECTED", if (approved) (request?.amount ?: 0.0) else 0.0, adminUid, if (remark.isBlank()) adminName else "$adminName - $remark"); fetchAdminData() } catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to review salary advance" } } }
