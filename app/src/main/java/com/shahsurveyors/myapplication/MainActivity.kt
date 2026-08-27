@@ -116,7 +116,6 @@ class MainActivity : ComponentActivity() {
                             composable("add_client") { AddClientScreen(viewModel = clientViewModel, onBack = { navController.popBackStack() }, onSaved = { navController.popBackStack() }) }
                             composable("projects") { ProjectManagementScreen(onBack = { navController.popBackStack() }) }
                             composable("marketing") { MarketingScreen(onBack = { navController.popBackStack() }) }
-                            composable("quotes") { QuotationHistoryScreen(onBack = { navController.popBackStack() }) }
                             composable("reports_finance") { FinancialReportScreen(onBack = { navController.popBackStack() }) }
                             composable("reports_work") { WorkProgressReportScreen(onBack = { navController.popBackStack() }) }
                         }
