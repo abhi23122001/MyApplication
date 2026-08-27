@@ -50,15 +50,27 @@ class PayrollCalculator(
             }
 
             val attendance = attendanceRepository.getAttendanceForMonth(uid, start, end)
-            val approvedLeaveDates = expandApprovedLeaveDates(
-                leaveRepository.getRequestsForUser(uid), monthStart, monthEnd
+            val approvedRequests = leaveRepository.getRequestsForUser(uid)
+                .filter { it.status == "APPROVED" }
+            val paidLeaveRequestIds = approvedRequests
+                .filter { isPaidLeaveType(it.leaveType) }
+                .map { it.id }
+                .filter { it.isNotBlank() }
+                .toSet()
+            val paidLeaveDates = expandPaidLeaveDates(
+                approvedRequests,
+                monthStart,
+                monthEnd
             )
             val attendanceLeaveDates = attendance
-                .filter { it.status == "APPROVED_LEAVE" }
+                .filter {
+                    it.status == "APPROVED_LEAVE" &&
+                        (it.leaveRequestId.isBlank() || it.leaveRequestId in paidLeaveRequestIds)
+                }
                 .mapNotNull { runCatching { LocalDate.parse(it.date) }.getOrNull() }
                 .filter(::isWorkingDay)
                 .toSet()
-            val paidLeaveDates = approvedLeaveDates + attendanceLeaveDates
+            val payableLeaveDates = paidLeaveDates + attendanceLeaveDates
             val presentDates = attendance
                 .filter { it.status != "APPROVED_LEAVE" && it.punchInTime != null }
                 .mapNotNull { runCatching { LocalDate.parse(it.date) }.getOrNull() }
@@ -66,7 +78,7 @@ class PayrollCalculator(
                 .toSet()
 
             val presentDays = presentDates.size
-            val leaveDays = (paidLeaveDates - presentDates).size
+            val leaveDays = (payableLeaveDates - presentDates).size
             var absentDays = 0
             var monthlyGross = 0.0
             var absenceDeduction = 0.0
@@ -77,7 +89,7 @@ class PayrollCalculator(
                 if (isWorkingDay(date)) {
                     val profile = profileFor(date)
                     if (profile != null) {
-                        val payable = presentDates.contains(date) || paidLeaveDates.contains(date)
+                        val payable = presentDates.contains(date) || payableLeaveDates.contains(date)
                         if (profile.payType == "MONTHLY") {
                             val daySalary = profile.monthlySalary / scheduledWorkingDays.coerceAtLeast(1)
                             monthlyGross += daySalary
@@ -87,7 +99,7 @@ class PayrollCalculator(
                             }
                         } else {
                             if (presentDates.contains(date)) dailyGross += profile.dailyRate
-                            else if (!paidLeaveDates.contains(date)) absentDays++
+                            else if (!payableLeaveDates.contains(date)) absentDays++
                         }
                     }
                 }
@@ -102,7 +114,7 @@ class PayrollCalculator(
             }
             val lateCount = attendance.count { it.isLate && it.status != "APPROVED_LEAVE" }
             val earlyOutCount = attendance.count { it.isEarlyOut && it.status != "APPROVED_LEAVE" }
-            val missingPunchOutCount = attendance.count { it.punchOutMissing }
+            val missingPunchOutCount = attendance.count { it.punchOutMissing && it.status != "APPROVED_LEAVE" }
 
             val approvedAdvances = advanceSalaryRepository.getForUser(uid)
                 .filter { it.status == "APPROVED" && it.approvedAmount > 0.0 && it.installments > 0 }
@@ -161,13 +173,13 @@ class PayrollCalculator(
 
     private fun isWorkingDay(date: LocalDate): Boolean = date.dayOfWeek != DayOfWeek.SUNDAY
 
-    private fun expandApprovedLeaveDates(
+    private fun expandPaidLeaveDates(
         requests: List<LeaveRequestModel>,
         monthStart: LocalDate,
         monthEnd: LocalDate
     ): Set<LocalDate> {
         val result = mutableSetOf<LocalDate>()
-        requests.filter { it.status == "APPROVED" }.forEach { request ->
+        requests.filter { it.status == "APPROVED" && isPaidLeaveType(it.leaveType) }.forEach { request ->
             val from = runCatching { LocalDate.parse(request.fromDate) }.getOrNull() ?: return@forEach
             val to = runCatching { LocalDate.parse(request.toDate) }.getOrNull() ?: return@forEach
             var date = maxOf(from, monthStart)
@@ -178,5 +190,10 @@ class PayrollCalculator(
             }
         }
         return result
+    }
+
+    private fun isPaidLeaveType(type: String): Boolean = when (type.uppercase()) {
+        "UNPAID" -> false
+        else -> true
     }
 }
