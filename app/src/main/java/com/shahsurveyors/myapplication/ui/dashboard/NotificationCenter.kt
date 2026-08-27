@@ -13,7 +13,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -23,7 +22,6 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.shahsurveyors.myapplication.data.FirebaseConstants
 import com.shahsurveyors.myapplication.ui.theme.*
-import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -43,8 +41,8 @@ fun NotificationCenter(viewModel: DashboardViewModel, onDismiss: () -> Unit) {
     val uid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
     var notifications by remember { mutableStateOf<List<LiveNotification>>(emptyList()) }
 
-    LaunchedEffect(uid) {
-        if (uid.isBlank()) return@LaunchedEffect
+    DisposableEffect(uid) {
+        if (uid.isBlank()) return@DisposableEffect onDispose { }
         val registration = firestore.collection(FirebaseConstants.COLLECTION_NOTIFICATIONS)
             .whereEqualTo("recipientUid", uid)
             .orderBy("createdAt", Query.Direction.DESCENDING)
@@ -63,7 +61,7 @@ fun NotificationCenter(viewModel: DashboardViewModel, onDismiss: () -> Unit) {
                     )
                 }
             }
-        awaitDispose { registration.remove() }
+        onDispose { registration.remove() }
     }
 
     ModalBottomSheet(
