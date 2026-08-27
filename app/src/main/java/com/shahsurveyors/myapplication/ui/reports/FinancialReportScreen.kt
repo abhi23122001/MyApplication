@@ -7,8 +7,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.google.firebase.firestore.FirebaseFirestore
-import java.text.SimpleDateFormat
-import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -18,14 +16,17 @@ fun FinancialReportScreen(onBack: () -> Unit) {
     var income by remember { mutableStateOf(0.0) }
     var expense by remember { mutableStateOf(0.0) }
     var error by remember { mutableStateOf<String?>(null) }
-    fun load() {
-        val now = Calendar.getInstance()
-        when (period) { "Weekly" -> now.add(Calendar.DAY_OF_YEAR, -7); "Yearly" -> now.add(Calendar.YEAR, -1); else -> now.add(Calendar.MONTH, -1) }
-        val from = now.time
-        db.collection("expenses").get().addOnSuccessListener { s -> expense = s.documents.sumOf { it.getDouble("amount") ?: 0.0 } }.addOnFailureListener { error = it.message }
-        db.collection("invoices").get().addOnSuccessListener { s -> income = s.documents.sumOf { (it.getDouble("total") ?: it.getDouble("amount") ?: 0.0) } }.addOnFailureListener { error = it.message }
+    LaunchedEffect(period) {
+        val from = java.util.Calendar.getInstance()
+        when (period) { "Weekly" -> from.add(java.util.Calendar.DAY_OF_YEAR, -7); "Yearly" -> from.add(java.util.Calendar.YEAR, -1); else -> from.add(java.util.Calendar.MONTH, -1) }
+        val fromMillis = from.timeInMillis
+        db.collection("expenses").get().addOnSuccessListener { s ->
+            expense = s.documents.filter { (it.getTimestamp("date")?.toDate()?.time ?: it.getTimestamp("createdAt")?.toDate()?.time ?: 0L) >= fromMillis }.sumOf { it.getDouble("amount") ?: 0.0 }
+        }.addOnFailureListener { error = it.message }
+        db.collection("invoices").get().addOnSuccessListener { s ->
+            income = s.documents.filter { (it.getTimestamp("date")?.toDate()?.time ?: it.getTimestamp("createdAt")?.toDate()?.time ?: 0L) >= fromMillis }.sumOf { it.getDouble("total") ?: it.getDouble("amount") ?: 0.0 }
+        }.addOnFailureListener { error = it.message }
     }
-    LaunchedEffect(period) { load() }
     val profit = income - expense
     Scaffold(topBar = { TopAppBar(title = { Text("Financial Reports") }, navigationIcon = { TextButton(onClick = onBack) { Text("Back") } }) }) { p ->
         LazyColumn(Modifier.fillMaxSize().padding(p).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
