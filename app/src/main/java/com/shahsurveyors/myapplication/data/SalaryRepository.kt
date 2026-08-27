@@ -19,6 +19,17 @@ class SalaryRepository(
             .sortedByDescending { it.effectiveFrom }
     }
 
+    /** Returns all saved salary profiles. Used by payroll so a valid salary profile
+     * is not hidden just because an employee directory query changes its filtering. */
+    suspend fun getAllProfiles(): List<SalaryProfileModel> {
+        return collection
+            .get()
+            .await()
+            .toObjects(SalaryProfileModel::class.java)
+            .filter { it.employeeUid.isNotBlank() }
+            .sortedByDescending { it.effectiveFrom }
+    }
+
     suspend fun getCurrent(employeeUid: String): SalaryProfileModel? {
         return getHistory(employeeUid).firstOrNull { it.active }
     }
