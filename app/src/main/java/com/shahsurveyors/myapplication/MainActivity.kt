@@ -5,8 +5,6 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.animation.*
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -92,7 +90,7 @@ class MainActivity : ComponentActivity() {
                             composable("splash") { SplashScreen(onAnimationFinished = { val destination = if (authViewModel.isUserLoggedIn) "dashboard" else "login"; navController.navigate(destination) { popUpTo("splash") { inclusive = true } } }) }
                             composable("login") { LoginScreen(viewModel = authViewModel, onSignupClick = { navController.navigate("signup") }, onLoginSuccess = { navController.navigate("dashboard") { popUpTo("login") { inclusive = true }; launchSingleTop = true } }) }
                             composable("signup") { SignupScreen(viewModel = authViewModel, onBackToLogin = { navController.popBackStack() }) }
-                            composable("dashboard") { DashboardScreen(viewModel = dashboardViewModel, userName = authViewModel.userName, userRole = authViewModel.userRole, userAccess = authViewModel.userAccess, onNavigateToAttendance = { navController.navigate("attendance") }, onNavigateToEquipment = { navController.navigate("equipment") }, onNavigateToTasks = { navController.navigate("tasks") }, onNavigateToSurvey = { navController.navigate("survey") }, onNavigateToChat = { navController.navigate("chat") }, onNavigateToAdmin = { navController.navigate("employees") }, onNavigateToBilling = { navController.navigate("billing") }, onNavigateToExpense = { navController.navigate("expense") }, onNavigateToDsr = { navController.navigate("dsr") }, onNavigateToClients = { navController.navigate("clients") }, isAdmin = authViewModel.userRole.equals("admin", ignoreCase = true), onRefresh = { dashboardViewModel.refresh() }) }
+                            composable("dashboard") { DashboardScreen(viewModel = dashboardViewModel, userName = authViewModel.userName, userRole = authViewModel.userRole, userAccess = authViewModel.userAccess, onNavigateToAttendance = { navController.navigate("attendance") }, onNavigateToEquipment = { navController.navigate("equipment") }, onNavigateToTasks = { navController.navigate("tasks") }, onNavigateToSurvey = { navController.navigate("survey") }, onNavigateToChat = { navController.navigate("chat") }, onNavigateToAdmin = { navController.navigate("employees") }, onNavigateToBilling = { navController.navigate("billing") }, onNavigateToExpense = { navController.navigate("expense") }, onNavigateToDsr = { navController.navigate("dsr") }, onNavigateToClients = { navController.navigate("clients") }, onNavigateToProjects = { navController.navigate("projects") }, onNavigateToBroadcast = { navController.navigate("communication") }, isAdmin = authViewModel.userRole.equals("admin", ignoreCase = true), onRefresh = { dashboardViewModel.refresh() }) }
                             composable("attendance") { LaunchedEffect(authViewModel.currentUserUid) { authViewModel.currentUserUid?.let { attendanceViewModel.checkStatus(it) } }; AttendanceScreen(uid = authViewModel.currentUserUid ?: "", userName = authViewModel.userName) }
                             composable("employees") { EmployeeManagementScreen(viewModel = adminViewModel, onBack = { navController.popBackStack() }) }
                             composable("leave") { LeaveManagementScreen(repository = leaveRepository, uid = authViewModel.currentUserUid ?: "", userName = authViewModel.userName, userRole = authViewModel.userRole, onBack = { navController.popBackStack() }) }
@@ -104,6 +102,7 @@ class MainActivity : ComponentActivity() {
                             composable("survey") { SurveyCalculatorScreen(onBack = { navController.popBackStack() }) }
                             composable("settings") { GeoFenceSettingsScreen(onBack = { navController.popBackStack() }) }
                             composable("admin_hub") { AdminHubScreen(viewModel = adminViewModel, onBack = { navController.popBackStack() }, onNavigateToCompanySettings = { navController.navigate("company_settings") }, onNavigateToBankDetails = { navController.navigate("bank_details") }, onNavigateToTerms = { navController.navigate("terms_conditions") }) }
+                            composable("communication") { AdminCommunicationScreen(onBack = { navController.popBackStack() }) }
                             composable("company_settings") { CompanySettingsScreen(viewModel = adminViewModel, onBack = { navController.popBackStack() }) }
                             composable("bank_details") { BankDetailsScreen(viewModel = adminViewModel, onBack = { navController.popBackStack() }) }
                             composable("terms_conditions") { TermsAndConditionsScreen(viewModel = adminViewModel, onBack = { navController.popBackStack() }) }
