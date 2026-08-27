@@ -21,14 +21,11 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.storage.FirebaseStorage
-
 import com.shahsurveyors.myapplication.data.*
 import com.shahsurveyors.myapplication.data.local.AppDatabase
-
 import com.shahsurveyors.myapplication.ui.admin.*
 import com.shahsurveyors.myapplication.ui.attendance.*
 import com.shahsurveyors.myapplication.ui.auth.*
@@ -41,6 +38,8 @@ import com.shahsurveyors.myapplication.ui.finance.*
 import com.shahsurveyors.myapplication.ui.leave.*
 import com.shahsurveyors.myapplication.ui.more.MoreModulesScreen
 import com.shahsurveyors.myapplication.ui.ops.*
+import com.shahsurveyors.myapplication.ui.projects.ProjectManagementScreen
+import com.shahsurveyors.myapplication.ui.marketing.MarketingScreen
 import com.shahsurveyors.myapplication.ui.splash.SplashScreen
 import com.shahsurveyors.myapplication.ui.survey.SurveyCalculatorScreen
 import com.shahsurveyors.myapplication.ui.tasks.*
@@ -75,7 +74,6 @@ class MainActivity : ComponentActivity() {
                     val billingRepository = remember { BillingRepository(database.appDao()) }
                     val salaryRepository = remember { SalaryRepository(firestore) }
                     val advanceSalaryRepository = remember { AdvanceSalaryRepository(firestore) }
-
                     val authViewModel: AuthViewModel = viewModel(factory = AuthViewModelFactory(authRepository, userRepository, sessionManager))
                     val dashboardViewModel: DashboardViewModel = viewModel(factory = DashboardViewModelFactory(dashboardRepository))
                     val attendanceViewModel: AttendanceViewModel = viewModel(factory = AttendanceViewModelFactory(attendanceRepository, storageRepository))
@@ -86,58 +84,16 @@ class MainActivity : ComponentActivity() {
                     val clientViewModel: ClientViewModel = viewModel(factory = ClientViewModelFactory(clientRepository))
                     val salaryViewModel: SalaryViewModel = viewModel(factory = SalaryViewModelFactory(userRepository, salaryRepository))
                     val dsrViewModel: DSRViewModel = viewModel(factory = DSRViewModelFactory(dsrRepository, storageRepository))
-
                     val navController = rememberNavController()
                     val navBackStackEntry by navController.currentBackStackEntryAsState()
                     val currentRoute = navBackStackEntry?.destination?.route
-
-                    MainScaffold(
-                        currentRoute = currentRoute,
-                        onNavigate = { route ->
-                            navController.navigate(route) {
-                                popUpTo(navController.graph.startDestinationId) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        }
-                    ) { modifier ->
+                    MainScaffold(currentRoute = currentRoute, onNavigate = { route -> navController.navigate(route) { popUpTo(navController.graph.startDestinationId) { saveState = true }; launchSingleTop = true; restoreState = true } }) { modifier ->
                         NavHost(navController = navController, startDestination = "splash", modifier = modifier) {
-                            composable("splash") {
-                                SplashScreen(onAnimationFinished = {
-                                    val destination = if (authViewModel.isUserLoggedIn) "dashboard" else "login"
-                                    navController.navigate(destination) { popUpTo("splash") { inclusive = true } }
-                                })
-                            }
-                            composable("login") {
-                                LoginScreen(viewModel = authViewModel, onSignupClick = { navController.navigate("signup") }, onLoginSuccess = {
-                                    navController.navigate("dashboard") { popUpTo("login") { inclusive = true }; launchSingleTop = true }
-                                })
-                            }
+                            composable("splash") { SplashScreen(onAnimationFinished = { val destination = if (authViewModel.isUserLoggedIn) "dashboard" else "login"; navController.navigate(destination) { popUpTo("splash") { inclusive = true } } }) }
+                            composable("login") { LoginScreen(viewModel = authViewModel, onSignupClick = { navController.navigate("signup") }, onLoginSuccess = { navController.navigate("dashboard") { popUpTo("login") { inclusive = true }; launchSingleTop = true } }) }
                             composable("signup") { SignupScreen(viewModel = authViewModel, onBackToLogin = { navController.popBackStack() }) }
-                            composable("dashboard") {
-                                DashboardScreen(
-                                    viewModel = dashboardViewModel,
-                                    userName = authViewModel.userName,
-                                    userRole = authViewModel.userRole,
-                                    userAccess = authViewModel.userAccess,
-                                    onNavigateToAttendance = { navController.navigate("attendance") },
-                                    onNavigateToEquipment = { navController.navigate("equipment") },
-                                    onNavigateToTasks = { navController.navigate("tasks") },
-                                    onNavigateToSurvey = { navController.navigate("survey") },
-                                    onNavigateToChat = { navController.navigate("chat") },
-                                    onNavigateToAdmin = { navController.navigate("employees") },
-                                    onNavigateToBilling = { navController.navigate("billing") },
-                                    onNavigateToExpense = { navController.navigate("expense") },
-                                    onNavigateToDsr = { navController.navigate("dsr") },
-                                    onNavigateToClients = { navController.navigate("clients") },
-                                    isAdmin = authViewModel.userRole.equals("admin", ignoreCase = true),
-                                    onRefresh = { dashboardViewModel.refresh() }
-                                )
-                            }
-                            composable("attendance") {
-                                LaunchedEffect(authViewModel.currentUserUid) { authViewModel.currentUserUid?.let { attendanceViewModel.checkStatus(it) } }
-                                AttendanceScreen(uid = authViewModel.currentUserUid ?: "", userName = authViewModel.userName)
-                            }
+                            composable("dashboard") { DashboardScreen(viewModel = dashboardViewModel, userName = authViewModel.userName, userRole = authViewModel.userRole, userAccess = authViewModel.userAccess, onNavigateToAttendance = { navController.navigate("attendance") }, onNavigateToEquipment = { navController.navigate("equipment") }, onNavigateToTasks = { navController.navigate("tasks") }, onNavigateToSurvey = { navController.navigate("survey") }, onNavigateToChat = { navController.navigate("chat") }, onNavigateToAdmin = { navController.navigate("employees") }, onNavigateToBilling = { navController.navigate("billing") }, onNavigateToExpense = { navController.navigate("expense") }, onNavigateToDsr = { navController.navigate("dsr") }, onNavigateToClients = { navController.navigate("clients") }, isAdmin = authViewModel.userRole.equals("admin", ignoreCase = true), onRefresh = { dashboardViewModel.refresh() }) }
+                            composable("attendance") { LaunchedEffect(authViewModel.currentUserUid) { authViewModel.currentUserUid?.let { attendanceViewModel.checkStatus(it) } }; AttendanceScreen(uid = authViewModel.currentUserUid ?: "", userName = authViewModel.userName) }
                             composable("employees") { EmployeeManagementScreen(viewModel = adminViewModel, onBack = { navController.popBackStack() }) }
                             composable("leave") { LeaveManagementScreen(repository = leaveRepository, uid = authViewModel.currentUserUid ?: "", userName = authViewModel.userName, userRole = authViewModel.userRole, onBack = { navController.popBackStack() }) }
                             composable("advance_salary") { AdvanceSalaryScreen(repository = advanceSalaryRepository, uid = authViewModel.currentUserUid ?: "", userName = authViewModel.userName, onBack = { navController.popBackStack() }) }
@@ -151,41 +107,13 @@ class MainActivity : ComponentActivity() {
                             composable("company_settings") { CompanySettingsScreen(viewModel = adminViewModel, onBack = { navController.popBackStack() }) }
                             composable("bank_details") { BankDetailsScreen(viewModel = adminViewModel, onBack = { navController.popBackStack() }) }
                             composable("terms_conditions") { TermsAndConditionsScreen(viewModel = adminViewModel, onBack = { navController.popBackStack() }) }
-                            composable("salary") {
-                                SalaryManagementScreen(
-                                    viewModel = salaryViewModel,
-                                    onBack = { navController.popBackStack() },
-                                    onGenerateSalarySlip = { salary ->
-                                        try {
-                                            val file = SalarySlipGenerator.generatePdf(context, salary)
-                                            val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
-                                            val intent = Intent(Intent.ACTION_VIEW).apply {
-                                                setDataAndType(uri, "application/pdf")
-                                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                            }
-                                            try {
-                                                context.startActivity(intent)
-                                            } catch (_: ActivityNotFoundException) {
-                                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                                    type = "application/pdf"
-                                                    putExtra(Intent.EXTRA_STREAM, uri)
-                                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                                }
-                                                context.startActivity(Intent.createChooser(shareIntent, "Open or share salary slip"))
-                                            }
-                                        } catch (e: Exception) {
-                                            e.printStackTrace()
-                                        }
-                                    }
-                                )
-                            }
+                            composable("salary") { SalaryManagementScreen(viewModel = salaryViewModel, onBack = { navController.popBackStack() }, onGenerateSalarySlip = { salary -> try { val file = SalarySlipGenerator.generatePdf(context, salary); val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file); val intent = Intent(Intent.ACTION_VIEW).apply { setDataAndType(uri, "application/pdf"); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }; try { context.startActivity(intent) } catch (_: ActivityNotFoundException) { val shareIntent = Intent(Intent.ACTION_SEND).apply { type = "application/pdf"; putExtra(Intent.EXTRA_STREAM, uri); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) }; context.startActivity(Intent.createChooser(shareIntent, "Open or share salary slip")) } } catch (e: Exception) { e.printStackTrace() } }) }
                             composable("billing") { val billingViewModel: BillingViewModel = viewModel(factory = BillingViewModelFactory(billingRepository)); BillingScreen(viewModel = billingViewModel, onBack = { navController.popBackStack() }) }
                             composable("expense") { ExpenseClaimsScreen(viewModel = expenseViewModel, uid = authViewModel.currentUserUid ?: "", userName = authViewModel.userName, onBack = { navController.popBackStack() }) }
                             composable("dsr") { DailyStatusReportScreen(viewModel = dsrViewModel, onBack = { navController.popBackStack() }) }
                             composable("clients") { CRMClientScreen(viewModel = clientViewModel, onBack = { navController.popBackStack() }) }
-                            composable("projects") { Box(modifier = Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) { androidx.compose.material3.Text(text = "Projects module") } }
-                            composable("marketing") { Box(modifier = Modifier.fillMaxSize()) }
+                            composable("projects") { ProjectManagementScreen(onBack = { navController.popBackStack() }) }
+                            composable("marketing") { MarketingScreen(onBack = { navController.popBackStack() }) }
                         }
                     }
                 }
