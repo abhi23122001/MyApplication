@@ -4,11 +4,20 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.ImageFormat
+import android.graphics.Matrix
+import android.graphics.Paint
+import android.graphics.Rect
+import android.graphics.YuvImage
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
+import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
@@ -24,7 +33,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -78,6 +87,10 @@ fun AttendanceScreen(uid: String, userName: String, modifier: Modifier = Modifie
         SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH).apply {
             timeZone = TimeZone.getTimeZone("GMT+05:30")
         }.format(Date())
+    }
+
+    DisposableEffect(Unit) {
+        onDispose { cameraExecutor.shutdown() }
     }
 
     val cameraPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -151,7 +164,7 @@ fun AttendanceScreen(uid: String, userName: String, modifier: Modifier = Modifie
             OutlinedTextField(value = siteName, onValueChange = { siteName = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Work Area / Site Name") }, leadingIcon = { Icon(Icons.Default.LocationOn, null) }, singleLine = true, enabled = attendanceViewModel.currentStatus != "PUNCHED OUT", shape = RoundedCornerShape(14.dp))
 
             Text("Verification Photo", style = MaterialTheme.typography.titleSmall)
-            Box(Modifier.fillMaxWidth().aspectRatio(.86f).clip(RoundedCornerShape(20.dp)).background(Color.Black), contentAlignment = Alignment.Center) {
+            Box(Modifier.fillMaxWidth().aspectRatio(.86f).clip(RoundedCornerShape(20.dp)).background(ComposeColor.Black), contentAlignment = Alignment.Center) {
                 if (cameraPermission) {
                     val lifecycleOwner = LocalLifecycleOwner.current
                     AndroidView(modifier = Modifier.fillMaxSize(), factory = { ctx ->
@@ -239,12 +252,29 @@ fun AttendanceScreen(uid: String, userName: String, modifier: Modifier = Modifie
                     if (capture == null) { cameraError = "Camera is not ready"; return@Button }
                     cameraError = null
                     capture.takePicture(cameraExecutor, object : ImageCapture.OnImageCapturedCallback() {
-                        override fun onCaptureSuccess(image: androidx.camera.core.ImageProxy) {
-                            image.close()
-                            val bitmap = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
-                            ContextCompat.getMainExecutor(context).execute { attendanceViewModel.punchAttendance(context, uid, userName, bitmap, siteName) }
+                        override fun onCaptureSuccess(image: ImageProxy) {
+                            val bitmap = try {
+                                imageProxyToBitmap(image)
+                            } catch (e: Exception) {
+                                null
+                            } finally {
+                                image.close()
+                            }
+
+                            ContextCompat.getMainExecutor(context).execute {
+                                if (bitmap == null) {
+                                    cameraError = "Unable to process captured photo"
+                                } else {
+                                    attendanceViewModel.punchAttendance(context, uid, userName, bitmap, siteName)
+                                }
+                            }
                         }
-                        override fun onError(exception: ImageCaptureException) { ContextCompat.getMainExecutor(context).execute { cameraError = "Camera error: ${exception.localizedMessage ?: "Unable to capture photo"}" } }
+
+                        override fun onError(exception: ImageCaptureException) {
+                            ContextCompat.getMainExecutor(context).execute {
+                                cameraError = "Camera error: ${exception.localizedMessage ?: "Unable to capture photo"}"
+                            }
+                        }
                     })
                 }
             ) {
@@ -290,4 +320,42 @@ fun AttendanceScreen(uid: String, userName: String, modifier: Modifier = Modifie
             }
         )
     }
+}
+
+private fun imageProxyToBitmap(image: ImageProxy): Bitmap? {
+    if (image.format != ImageFormat.YUV_420_888 || image.planes.size < 3) return null
+
+    val width = image.width
+    val height = image.height
+    val yPlane = image.planes[0]
+    val uPlane = image.planes[1]
+    val vPlane = image.planes[2]
+    val yBuffer = yPlane.buffer
+    val uBuffer = uPlane.buffer
+    val vBuffer = vPlane.buffer
+    val pixels = IntArray(width * height)
+
+    for (y in 0 until height) {
+        val yRow = y * yPlane.rowStride
+        val uvRow = (y / 2) * uPlane.rowStride
+        val vUvRow = (y / 2) * vPlane.rowStride
+        for (x in 0 until width) {
+            val yValue = (yBuffer.get(yRow + x * yPlane.pixelStride).toInt() and 0xFF)
+            val uValue = (uBuffer.get(uvRow + (x / 2) * uPlane.pixelStride).toInt() and 0xFF) - 128
+            val vValue = (vBuffer.get(vUvRow + (x / 2) * vPlane.pixelStride).toInt() and 0xFF) - 128
+            val c = (yValue - 16).coerceAtLeast(0)
+            val r = ((298 * c + 409 * vValue + 128) shr 8).coerceIn(0, 255)
+            val g = ((298 * c - 100 * uValue - 208 * vValue + 128) shr 8).coerceIn(0, 255)
+            val b = ((298 * c + 516 * uValue + 128) shr 8).coerceIn(0, 255)
+            pixels[y * width + x] = Color.rgb(r, g, b)
+        }
+    }
+
+    var bitmap = Bitmap.createBitmap(pixels, width, height, Bitmap.Config.ARGB_8888)
+    val rotation = image.imageInfo.rotationDegrees
+    if (rotation != 0) {
+        val matrix = Matrix().apply { postRotate(rotation.toFloat()) }
+        bitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+    }
+    return bitmap
 }
