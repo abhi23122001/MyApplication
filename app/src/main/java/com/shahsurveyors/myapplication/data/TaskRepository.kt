@@ -7,9 +7,7 @@ import com.shahsurveyors.myapplication.models.TaskModel
 import com.shahsurveyors.myapplication.models.UserProfile
 import kotlinx.coroutines.tasks.await
 
-class TaskRepository(
-    private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
-) {
+class TaskRepository(private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()) {
     private val tasksCollection = firestore.collection(FirebaseConstants.COLLECTION_TASKS)
     private val usersCollection = firestore.collection(FirebaseConstants.COLLECTION_USERS)
     private val projectsCollection = firestore.collection(FirebaseConstants.COLLECTION_PROJECTS)
@@ -18,13 +16,13 @@ class TaskRepository(
     suspend fun getTasksForUser(uid: String): List<TaskModel> = try {
         tasksCollection.whereEqualTo("assignedToUid", uid).get().await().documents
             .mapNotNull { it.toObject(TaskModel::class.java)?.copy(id = it.id) }
-            .sortedWith(compareBy(nullsLast()) { it.dueDate })
+            .sortedBy { it.dueDate?.seconds ?: Long.MAX_VALUE }
     } catch (_: Exception) { emptyList() }
 
     suspend fun getAllTasks(): List<TaskModel> = try {
         tasksCollection.get().await().documents
             .mapNotNull { it.toObject(TaskModel::class.java)?.copy(id = it.id) }
-            .sortedWith(compareBy(nullsLast()) { it.dueDate })
+            .sortedBy { it.dueDate?.seconds ?: Long.MAX_VALUE }
     } catch (_: Exception) { emptyList() }
 
     suspend fun getEmployees(): List<UserProfile> = try {
@@ -47,17 +45,8 @@ class TaskRepository(
         require(task.projectId.isNotBlank()) { "Project is required" }
         val id = task.id.ifBlank { tasksCollection.document().id }
         tasksCollection.document(id).set(task.copy(id = id)).await()
-        tasksCollection.document(id).collection("history").add(
-            mapOf("status" to task.status, "action" to "CREATED", "at" to Timestamp.now(), "actorUid" to task.assignedToUid)
-        ).await()
-        notificationRepository.createForUser(
-            recipientUid = task.assignedToUid,
-            type = "TASK_ASSIGNED",
-            title = "New Task Assigned",
-            message = "${task.title} has been assigned to you.",
-            referenceId = id,
-            route = "tasks"
-        )
+        tasksCollection.document(id).collection("history").add(mapOf("status" to task.status, "action" to "CREATED", "at" to Timestamp.now(), "actorUid" to task.assignedToUid)).await()
+        notificationRepository.createForUser(task.assignedToUid, "TASK_ASSIGNED", "New Task Assigned", "${task.title} has been assigned to you.", id, "tasks")
     }
 
     suspend fun updateTaskStatus(id: String, status: String, actorUid: String, isAdmin: Boolean) {
@@ -71,10 +60,7 @@ class TaskRepository(
         if (!isAdmin) require(task.assignedToUid == actorUid) { "You are not allowed to update this task" }
         ref.update(mapOf("status" to status, "updatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(), "updatedByUid" to actorUid)).await()
         ref.collection("history").add(mapOf("status" to status, "action" to "STATUS_CHANGED", "at" to Timestamp.now(), "actorUid" to actorUid)).await()
-        if (isAdmin) {
-            notificationRepository.createForUser(task.assignedToUid, "TASK_STATUS", "Task status updated", "${task.title}: $status", id, "tasks")
-        } else {
-            notificationRepository.createForAdmins("TASK_STATUS", "Task status updated", "${task.assignedToName.ifBlank { actorUid }} changed ${task.title} to $status", actorUid, task.assignedToName, id, "tasks")
-        }
+        if (isAdmin) notificationRepository.createForUser(task.assignedToUid, "TASK_STATUS", "Task status updated", "${task.title}: $status", id, "tasks")
+        else notificationRepository.createForAdmins("TASK_STATUS", "Task status updated", "${task.assignedToName.ifBlank { actorUid }} changed ${task.title} to $status", actorUid, task.assignedToName, id, "tasks")
     }
 }
