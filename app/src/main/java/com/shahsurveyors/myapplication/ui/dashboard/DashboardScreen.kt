@@ -130,7 +130,7 @@ fun DashboardScreen(
                     Icon(Icons.Default.Bolt, null, tint = WarningAmber)
                 }
                 Spacer(Modifier.height(10.dp))
-                QuickActionsGrid(onNavigateToAttendance, onNavigateToExpense, onNavigateToAdmin, onNavigateToBilling, isAdmin)
+                QuickActionsGrid(onNavigateToAttendance, onNavigateToExpense, onNavigateToAdmin, onNavigateToBilling, onNavigateToTasks, isAdmin)
             }
         }
     }
@@ -215,11 +215,19 @@ fun BroadcastSection(message: String, onClick: (() -> Unit)? = null) {
 private data class QuickAction(val title: String, val icon: ImageVector, val onClick: () -> Unit)
 
 @Composable
-fun QuickActionsGrid(onAttendance: () -> Unit, onExpense: () -> Unit, onAdmin: () -> Unit, onBilling: () -> Unit, isAdmin: Boolean) {
+fun QuickActionsGrid(
+    onAttendance: () -> Unit,
+    onExpense: () -> Unit,
+    onAdmin: () -> Unit,
+    onBilling: () -> Unit,
+    onTasks: () -> Unit,
+    isAdmin: Boolean
+) {
     val actions = buildList {
         add(QuickAction("Punch IN / OUT", Icons.Default.AccessTime, onAttendance))
         add(QuickAction("Add Expense", Icons.Default.ReceiptLong, onExpense))
         add(QuickAction("Create Quote", Icons.Default.Description, onBilling))
+        add(QuickAction(if (isAdmin) "Assign Task" else "My Tasks", Icons.Default.Assignment, onTasks))
         if (isAdmin) add(QuickAction("Add Employee", Icons.Default.PersonAdd, onAdmin))
     }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
