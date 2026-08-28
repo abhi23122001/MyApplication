@@ -2,7 +2,7 @@
   "name": "shah-erp-functions",
   "description": "Shah ERP Firebase notification functions",
   "main": "index.js",
-  "engines": { "node": "20" },
+  "engines": { "node": "22" },
   "scripts": { "lint": "echo lint", "serve": "firebase emulators:start --only functions", "deploy": "firebase deploy --only functions" },
   "dependencies": {
     "firebase-admin": "^13.5.0",
