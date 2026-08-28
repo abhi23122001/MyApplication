@@ -54,6 +54,7 @@ import com.shahsurveyors.myapplication.utils.SalarySlipGenerator
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        actionBar?.hide()
         setContent {
             ShahTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
