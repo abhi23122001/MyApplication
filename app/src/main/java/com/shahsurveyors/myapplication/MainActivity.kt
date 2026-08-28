@@ -102,7 +102,7 @@ class MainActivity : ComponentActivity() {
                             composable("employee_permissions") { EmployeePermissionsScreen(onBack = { navController.popBackStack() }) }
                             composable("leave") { LeaveManagementScreen(repository = leaveRepository, uid = authViewModel.currentUserUid ?: "", userName = authViewModel.userName, userRole = authViewModel.userRole, onBack = { navController.popBackStack() }) }
                             composable("advance_salary") { AdvanceSalaryScreen(repository = advanceSalaryRepository, uid = authViewModel.currentUserUid ?: "", userName = authViewModel.userName, onBack = { navController.popBackStack() }) }
-                            composable("chat") { RadarScreen(userUid = authViewModel.currentUserUid ?: "", userName = authViewModel.userName, onBack = { navController.popBackStack() }) }
+                            composable("chat") { RadarScreen(userUid = authViewModel.currentUserUid ?: "", userName = authViewModel.userName, isAdmin = authViewModel.userRole.equals("admin", ignoreCase = true), onBack = { navController.popBackStack() }) }
                             composable("more") { MoreModulesScreen(onNavigate = { route -> navController.navigate(route) }) }
                             composable("equipment") { EquipmentTrackerScreen(viewModel = equipmentViewModel, onBack = { navController.popBackStack() }) }
                             composable("tasks") { TaskManagementScreen(viewModel = taskViewModel, uid = authViewModel.currentUserUid ?: "", isAdmin = authViewModel.userRole.equals("admin", ignoreCase = true), onBack = { navController.popBackStack() }) }
