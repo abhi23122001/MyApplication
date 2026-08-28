@@ -105,7 +105,7 @@ class MainActivity : ComponentActivity() {
                             composable("chat") { RadarScreen(onBack = { navController.popBackStack() }) }
                             composable("more") { MoreModulesScreen(onNavigate = { route -> navController.navigate(route) }) }
                             composable("equipment") { EquipmentTrackerScreen(viewModel = equipmentViewModel, onBack = { navController.popBackStack() }) }
-                            composable("tasks") { TaskManagementScreen(viewModel = taskViewModel, uid = authViewModel.currentUserUid ?: "", onBack = { navController.popBackStack() }) }
+                            composable("tasks") { TaskManagementScreen(viewModel = taskViewModel, uid = authViewModel.currentUserUid ?: "", isAdmin = authViewModel.userRole.equals("admin", ignoreCase = true), onBack = { navController.popBackStack() }) }
                             composable("survey") { SurveyCalculatorScreen(onBack = { navController.popBackStack() }) }
                             composable("settings") { GeoFenceSettingsScreen(onBack = { navController.popBackStack() }) }
                             composable("admin_hub") { AdminHubScreen(viewModel = adminViewModel, onBack = { navController.popBackStack() }, onNavigateToCompanySettings = { navController.navigate("company_settings") }, onNavigateToBankDetails = { navController.navigate("bank_details") }, onNavigateToTerms = { navController.navigate("terms_conditions") }) }
