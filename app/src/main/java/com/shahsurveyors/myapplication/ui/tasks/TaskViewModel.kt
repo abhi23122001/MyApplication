@@ -12,13 +12,10 @@ import com.shahsurveyors.myapplication.models.TaskModel
 import com.shahsurveyors.myapplication.models.UserProfile
 import kotlinx.coroutines.launch
 
-class TaskViewModel(
-    private val repository: TaskRepository
-) : ViewModel() {
+class TaskViewModel(private val repository: TaskRepository) : ViewModel() {
     var isLoading by mutableStateOf(false)
     var isSaving by mutableStateOf(false)
     var errorMessage by mutableStateOf<String?>(null)
-
     val tasks = mutableStateListOf<TaskModel>()
     val employees = mutableStateListOf<UserProfile>()
     val projects = mutableStateListOf<ProjectModel>()
@@ -27,47 +24,41 @@ class TaskViewModel(
         viewModelScope.launch {
             isLoading = true
             errorMessage = null
-            val list = if (isAdmin) repository.getAllTasks() else repository.getTasksForUser(uid)
-            tasks.clear()
-            tasks.addAll(list)
-            isLoading = false
+            try {
+                val list = if (isAdmin) repository.getAllTasks() else repository.getTasksForUser(uid)
+                tasks.clear(); tasks.addAll(list)
+            } catch (e: Exception) { errorMessage = e.message ?: "Unable to load tasks" }
+            finally { isLoading = false }
         }
     }
 
     fun loadAssignmentData() {
         viewModelScope.launch {
-            isLoading = true
-            employees.clear()
-            projects.clear()
-            employees.addAll(repository.getEmployees())
-            projects.addAll(repository.getProjects())
-            isLoading = false
+            isLoading = true; errorMessage = null
+            try {
+                val loadedEmployees = repository.getEmployees()
+                val loadedProjects = repository.getProjects()
+                employees.clear(); employees.addAll(loadedEmployees)
+                projects.clear(); projects.addAll(loadedProjects)
+            } catch (e: Exception) { errorMessage = e.message ?: "Unable to load assignment data" }
+            finally { isLoading = false }
         }
     }
 
     fun saveTask(task: TaskModel, uid: String, isAdmin: Boolean) {
         viewModelScope.launch {
-            isSaving = true
-            errorMessage = null
-            try {
-                repository.saveTask(task)
-                fetchTasks(uid, isAdmin)
-            } catch (e: Exception) {
-                errorMessage = e.message ?: "Unable to save task"
-            } finally {
-                isSaving = false
-            }
+            isSaving = true; errorMessage = null
+            try { repository.saveTask(task); fetchTasks(uid, isAdmin) }
+            catch (e: Exception) { errorMessage = e.message ?: "Unable to save task" }
+            finally { isSaving = false }
         }
     }
 
     fun updateStatus(id: String, status: String, uid: String, isAdmin: Boolean = false) {
         viewModelScope.launch {
-            try {
-                repository.updateTaskStatus(id, status)
-                fetchTasks(uid, isAdmin)
-            } catch (e: Exception) {
-                errorMessage = e.message ?: "Unable to update task"
-            }
+            errorMessage = null
+            try { repository.updateTaskStatus(id, status, uid, isAdmin); fetchTasks(uid, isAdmin) }
+            catch (e: Exception) { errorMessage = e.message ?: "Unable to update task" }
         }
     }
 }
