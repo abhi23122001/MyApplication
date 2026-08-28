@@ -74,7 +74,7 @@ fun LiveRadarView(userUid: String, isAdmin: Boolean) {
     var error by remember { mutableStateOf<String?>(null) }
     var sharing by remember { mutableStateOf(false) }
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
-        sharing = if (grants[Manifest.permission.ACCESS_FINE_LOCATION] == true || grants[Manifest.permission.ACCESS_COARSE_LOCATION] == true) true else false
+        sharing = grants[Manifest.permission.ACCESS_FINE_LOCATION] == true || grants[Manifest.permission.ACCESS_COARSE_LOCATION] == true
         if (!sharing) error = "Location permission is required to share your live location."
     }
     DisposableEffect(Unit) {
@@ -91,14 +91,32 @@ fun LiveRadarView(userUid: String, isAdmin: Boolean) {
         onDispose { registration.remove() }
     }
     DisposableEffect(sharing) {
-        if (!sharing || userUid.isBlank()) return@DisposableEffect onDispose {}
-        val hasPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
-        if (!hasPermission) return@DisposableEffect onDispose {}
-        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 15000L).setMinUpdateIntervalMillis(5000L).build()
-        val callback = object : LocationCallback() { override fun onLocationResult(result: LocationResult) { result.lastLocation?.let { location -> firestore.collection(USERS_COLLECTION).document(userUid).set(mapOf("latitude" to location.latitude, "longitude" to location.longitude, "locationSharing" to true, "lastLocationAt" to Timestamp.now()), com.google.firebase.firestore.SetOptions.merge()) } } }
-        locationClient.requestLocationUpdates(request, callback, Looper.getMainLooper())
-        firestore.collection(USERS_COLLECTION).document(userUid).set(mapOf("locationSharing" to true, "lastLocationAt" to Timestamp.now()), com.google.firebase.firestore.SetOptions.merge())
-        onDispose { locationClient.removeLocationUpdates(callback); firestore.collection(USERS_COLLECTION).document(userUid).set(mapOf("locationSharing" to false, "lastLocationAt" to Timestamp.now()), com.google.firebase.firestore.SetOptions.merge()) }
+        if (!sharing || userUid.isBlank()) {
+            onDispose { }
+        } else {
+            val hasPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+            if (!hasPermission) {
+                onDispose { }
+            } else {
+                val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 15000L).setMinUpdateIntervalMillis(5000L).build()
+                val callback = object : LocationCallback() {
+                    override fun onLocationResult(result: LocationResult) {
+                        result.lastLocation?.let { location ->
+                            firestore.collection(USERS_COLLECTION).document(userUid).set(
+                                mapOf("latitude" to location.latitude, "longitude" to location.longitude, "locationSharing" to true, "lastLocationAt" to Timestamp.now()),
+                                com.google.firebase.firestore.SetOptions.merge()
+                            )
+                        }
+                    }
+                }
+                locationClient.requestLocationUpdates(request, callback, Looper.getMainLooper())
+                firestore.collection(USERS_COLLECTION).document(userUid).set(mapOf("locationSharing" to true, "lastLocationAt" to Timestamp.now()), com.google.firebase.firestore.SetOptions.merge())
+                onDispose {
+                    locationClient.removeLocationUpdates(callback)
+                    firestore.collection(USERS_COLLECTION).document(userUid).set(mapOf("locationSharing" to false, "lastLocationAt" to Timestamp.now()), com.google.firebase.firestore.SetOptions.merge())
+                }
+            }
+        }
     }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         if (!isAdmin) item { Card(Modifier.fillMaxWidth(), RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = ShahWhite)) { Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(if (sharing) "Live location is ON" else "Live location is OFF", fontWeight = FontWeight.Bold); Text("Your location is shared with Admin only while enabled.", fontSize = 10.sp, color = ShahMediumGrey) }; Button(onClick = { if (sharing) sharing = false else { val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED; val coarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED; if (fine || coarse) sharing = true else permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) }, colors = ButtonDefaults.buttonColors(containerColor = if (sharing) ErrorRed else ShahGreen)) { Text(if (sharing) "STOP" else "START") } } } }
