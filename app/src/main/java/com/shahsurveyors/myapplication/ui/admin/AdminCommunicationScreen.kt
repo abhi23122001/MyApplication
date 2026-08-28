@@ -7,7 +7,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -25,7 +27,10 @@ fun AdminCommunicationScreen(onBack: () -> Unit) {
 
     fun loadHistory() {
         val collection = if (tab == 0) "notifications" else "announcements"
-        db.collection(collection).orderBy("createdAt", com.google.firebase.firestore.Query.Direction.DESCENDING).limit(30).get()
+        db.collection(collection)
+            .orderBy("createdAt", Query.Direction.DESCENDING)
+            .limit(30)
+            .get()
             .addOnSuccessListener { snap -> history = snap.documents.map { it.data.orEmpty() } }
             .addOnFailureListener { status = "Unable to load history: ${it.message ?: "error"}" }
     }
@@ -33,23 +38,56 @@ fun AdminCommunicationScreen(onBack: () -> Unit) {
     LaunchedEffect(tab) { loadHistory() }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Communication Center") }, navigationIcon = { TextButton(onClick = onBack) { Text("Back") } }) }
+        topBar = {
+            TopAppBar(
+                title = { Text("Communication Center") },
+                navigationIcon = { TextButton(onClick = onBack) { Text("Back") } }
+            )
+        }
     ) { pad ->
-        LazyColumn(Modifier.fillMaxSize().padding(pad).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        LazyColumn(
+            Modifier.fillMaxSize().padding(pad).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
             item {
                 TabRow(selectedTabIndex = tab) {
                     Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Push Notification") })
                     Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Announcement") })
                 }
                 Spacer(Modifier.height(14.dp))
-                OutlinedTextField(title, { title = it }, Modifier.fillMaxWidth(), label = { Text("Title") }, singleLine = true)
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Title") },
+                    singleLine = true
+                )
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(message, { message = it }, Modifier.fillMaxWidth(), label = { Text("Message") }, minLines = 4)
+                OutlinedTextField(
+                    value = message,
+                    onValueChange = { message = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Message") },
+                    minLines = 4
+                )
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(target, { target = it.uppercase() }, Modifier.fillMaxWidth(), label = { Text("Target (ALL / EMPLOYEE / PROJECT:ID / USER:UID)") }, singleLine = true)
+                OutlinedTextField(
+                    value = target,
+                    onValueChange = { target = it.uppercase() },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Target") },
+                    supportingText = { Text("ALL / EMPLOYEE / ADMIN / USER:UID") },
+                    singleLine = true
+                )
                 if (tab == 1) {
                     Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(expiryDays, { expiryDays = it.filter(Char::isDigit) }, Modifier.fillMaxWidth(), label = { Text("Expiry in days") }, singleLine = true)
+                    OutlinedTextField(
+                        value = expiryDays,
+                        onValueChange = { expiryDays = it.filter(Char::isDigit) },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Expiry in days") },
+                        singleLine = true
+                    )
                 }
                 Spacer(Modifier.height(10.dp))
                 Button(
@@ -57,24 +95,35 @@ fun AdminCommunicationScreen(onBack: () -> Unit) {
                     onClick = {
                         val cleanTitle = title.trim()
                         val cleanMessage = message.trim()
+                        val cleanTarget = target.trim().uppercase().ifBlank { "ALL" }
                         if (cleanTitle.isBlank() || cleanMessage.isBlank()) {
                             status = "Title and message are required"
+                            return@Button
+                        }
+                        if (cleanTarget !in setOf("ALL", "EMPLOYEE", "ADMIN") && !cleanTarget.startsWith("USER:")) {
+                            status = "Target must be ALL, EMPLOYEE, ADMIN or USER:UID"
                             return@Button
                         }
                         scope.launch {
                             val collection = if (tab == 0) "notifications" else "announcements"
                             val data = hashMapOf<String, Any>(
+                                "type" to if (tab == 0) "ADMIN_PUSH" else "ANNOUNCEMENT",
                                 "title" to cleanTitle,
                                 "message" to cleanMessage,
-                                "target" to target.trim().ifBlank { "ALL" },
-                                "createdAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                                "target" to cleanTarget,
+                                "route" to if (tab == 0) "communication" else "announcements",
+                                "createdAt" to FieldValue.serverTimestamp(),
                                 "active" to true
                             )
-                            if (tab == 1) data["expiryDays"] = expiryDays.toLongOrNull()?.coerceAtLeast(1L) ?: 7L
+                            if (tab == 1) {
+                                data["expiryDays"] = expiryDays.toLongOrNull()?.coerceAtLeast(1L) ?: 7L
+                            }
                             db.collection(collection).add(data)
                                 .addOnSuccessListener {
-                                    status = if (tab == 0) "Notification queued successfully" else "Announcement published successfully"
-                                    title = ""; message = ""; loadHistory()
+                                    status = if (tab == 0) "Notification sent successfully" else "Announcement published successfully"
+                                    title = ""
+                                    message = ""
+                                    loadHistory()
                                 }
                                 .addOnFailureListener { status = "Save failed: ${it.message ?: "error"}" }
                         }
