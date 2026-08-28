@@ -255,25 +255,18 @@ fun AttendanceScreen(uid: String, userName: String, modifier: Modifier = Modifie
                         override fun onCaptureSuccess(image: ImageProxy) {
                             val bitmap = try {
                                 imageProxyToBitmap(image)
-                            } catch (e: Exception) {
+                            } catch (_: Exception) {
                                 null
                             } finally {
                                 image.close()
                             }
-
                             ContextCompat.getMainExecutor(context).execute {
-                                if (bitmap == null) {
-                                    cameraError = "Unable to process captured photo"
-                                } else {
-                                    attendanceViewModel.punchAttendance(context, uid, userName, bitmap, siteName)
-                                }
+                                if (bitmap == null) cameraError = "Unable to process captured photo"
+                                else attendanceViewModel.punchAttendance(context, uid, userName, bitmap, siteName)
                             }
                         }
-
                         override fun onError(exception: ImageCaptureException) {
-                            ContextCompat.getMainExecutor(context).execute {
-                                cameraError = "Camera error: ${exception.localizedMessage ?: "Unable to capture photo"}"
-                            }
+                            ContextCompat.getMainExecutor(context).execute { cameraError = "Camera error: ${exception.localizedMessage ?: "Unable to capture photo"}" }
                         }
                     })
                 }
@@ -323,6 +316,13 @@ fun AttendanceScreen(uid: String, userName: String, modifier: Modifier = Modifie
 }
 
 private fun imageProxyToBitmap(image: ImageProxy): Bitmap? {
+    if (image.format == ImageFormat.JPEG) {
+        val buffer = image.planes.firstOrNull()?.buffer ?: return null
+        val bytes = ByteArray(buffer.remaining())
+        buffer.get(bytes)
+        return BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+    }
+
     if (image.format != ImageFormat.YUV_420_888 || image.planes.size < 3) return null
 
     val width = image.width
@@ -340,7 +340,7 @@ private fun imageProxyToBitmap(image: ImageProxy): Bitmap? {
         val uvRow = (y / 2) * uPlane.rowStride
         val vUvRow = (y / 2) * vPlane.rowStride
         for (x in 0 until width) {
-            val yValue = (yBuffer.get(yRow + x * yPlane.pixelStride).toInt() and 0xFF)
+            val yValue = yBuffer.get(yRow + x * yPlane.pixelStride).toInt() and 0xFF
             val uValue = (uBuffer.get(uvRow + (x / 2) * uPlane.pixelStride).toInt() and 0xFF) - 128
             val vValue = (vBuffer.get(vUvRow + (x / 2) * vPlane.pixelStride).toInt() and 0xFF) - 128
             val c = (yValue - 16).coerceAtLeast(0)
