@@ -60,16 +60,12 @@ class NotificationRepository(
     suspend fun getUnreadCount(recipientUid: String, isAdmin: Boolean): Int {
         if (recipientUid.isBlank()) return 0
         return try {
-            val query = if (isAdmin) {
-                notifications
-                    .whereEqualTo("targetRole", FirebaseConstants.ROLE_ADMIN)
-                    .whereEqualTo("read", false)
-            } else {
-                notifications
-                    .whereEqualTo("recipientUid", recipientUid)
-                    .whereEqualTo("read", false)
-            }
-            query.get().await().size()
+            notifications
+                .whereEqualTo("recipientUid", recipientUid)
+                .whereEqualTo("read", false)
+                .get()
+                .await()
+                .size()
         } catch (_: Exception) {
             0
         }
