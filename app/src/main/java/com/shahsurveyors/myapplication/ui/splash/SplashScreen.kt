@@ -91,7 +91,6 @@ fun SplashScreen(onAnimationFinished: () -> Unit) {
             val w = size.width
             val h = size.height
 
-            // Soft green glow behind the logo, matching the reference.
             drawCircle(
                 color = ShahLightGreen.copy(alpha = 0.10f),
                 radius = w * 0.43f,
@@ -103,7 +102,6 @@ fun SplashScreen(onAnimationFinished: () -> Unit) {
                 center = Offset(w * 0.5f, h * 0.32f)
             )
 
-            // Small floating green/yellow particles.
             listOf(
                 Offset(w * 0.12f, h * 0.18f),
                 Offset(w * 0.83f, h * 0.16f),
@@ -119,7 +117,6 @@ fun SplashScreen(onAnimationFinished: () -> Unit) {
                 )
             }
 
-            // Gentle ground glow at the bottom.
             drawCircle(
                 color = ShahLightGreen.copy(alpha = 0.10f),
                 radius = w * 0.75f,
@@ -138,7 +135,6 @@ fun SplashScreen(onAnimationFinished: () -> Unit) {
         ) {
             Spacer(Modifier.height(38.dp))
 
-            // Animated logo with rotating green ring.
             Box(
                 modifier = Modifier
                     .size(154.dp)
@@ -182,9 +178,8 @@ fun SplashScreen(onAnimationFinished: () -> Unit) {
 
             Spacer(Modifier.height(22.dp))
 
-            // Typewriter title.
             val welcomePart = typed.take(11)
-            val companyPart = if (typed.length > 12) typed.drop(12) else ""
+            val companyPart = if (typed.length > 11) typed.drop(11) else ""
             Text(
                 text = welcomePart,
                 color = ShahDarkGreen,
@@ -253,7 +248,6 @@ private fun SurveyIllustration(modifier: Modifier) {
         val building = ShahLightGreen.copy(alpha = 0.52f)
         val line = ShahGreen.copy(alpha = 0.70f)
 
-        // Minimal skyline.
         drawLine(line, Offset(0f, base), Offset(size.width, base), 2.5f)
         val buildings = listOf(
             Triple(0.02f, 42f, 0.12f),
@@ -270,7 +264,6 @@ private fun SurveyIllustration(modifier: Modifier) {
             )
         }
 
-        // Tiny windows.
         listOf(
             Pair(0.055f, 30f), Pair(0.055f, 18f), Pair(0.205f, 43f),
             Pair(0.205f, 28f), Pair(0.335f, 21f), Pair(0.735f, 34f),
@@ -283,7 +276,6 @@ private fun SurveyIllustration(modifier: Modifier) {
             )
         }
 
-        // Total station tripod.
         val cx = size.width * 0.60f
         val top = size.height * 0.16f
         drawLine(line, Offset(cx, top), Offset(cx - 38f, base), 2.8f)
@@ -298,7 +290,6 @@ private fun SurveyIllustration(modifier: Modifier) {
         drawCircle(ShahGreen, 4f, Offset(cx, top - 2f))
         drawLine(line, Offset(cx - 10f, top + 5f), Offset(cx + 10f, top + 5f), 2f)
 
-        // Soft green landscape.
         drawLine(
             ShahLightGreen.copy(alpha = 0.75f),
             Offset(0f, base + 2f),
