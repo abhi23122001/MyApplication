@@ -11,6 +11,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.messaging.FirebaseMessaging
 import com.shahsurveyors.myapplication.data.AuthRepository
+import com.shahsurveyors.myapplication.data.FirebaseConstants
 import com.shahsurveyors.myapplication.data.SessionManager
 import com.shahsurveyors.myapplication.data.UserRepository
 import com.shahsurveyors.myapplication.models.UserProfile
@@ -48,7 +49,7 @@ class AuthViewModel(
                     if (!uid.isNullOrBlank()) {
                         currentUserUid = uid
                         userName = session["name"] ?: ""
-                        userRole = session["role"] ?: ""
+                        userRole = session["role"].orEmpty().trim()
                         userAccess = session["access"] ?: ""
                         userDepartment = session["dept"] ?: ""
                         isUserLoggedIn = true
@@ -112,7 +113,7 @@ class AuthViewModel(
             authError = "Account disabled."
             return
         }
-        if (!profile.approved && profile.role != "admin") {
+        if (!profile.approved && !profile.role.equals(FirebaseConstants.ROLE_ADMIN, ignoreCase = true)) {
             authRepository.signOut()
             sessionManager.clearSession()
             isUserLoggedIn = false
@@ -125,16 +126,17 @@ class AuthViewModel(
     }
 
     private suspend fun saveUserSession(profile: UserProfile) {
+        val normalizedRole = profile.role.trim()
         sessionManager.saveSession(
             uid = profile.uid,
             email = profile.email,
             name = profile.name,
-            role = profile.role,
+            role = normalizedRole,
             dept = profile.department,
             access = profile.access
         )
         userName = profile.name
-        userRole = profile.role
+        userRole = normalizedRole
         userAccess = profile.access
         userDepartment = profile.department
         userStatus = "APPROVED"
