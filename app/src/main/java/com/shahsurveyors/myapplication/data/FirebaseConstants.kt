@@ -20,7 +20,7 @@ object FirebaseConstants {
     const val STORAGE_DSR_PHOTOS = "dsr/photos"
     const val STORAGE_DOCUMENTS = "billing/documents"
 
-    const val ROLE_ADMIN = "admin"
+    const val ROLE_ADMIN = "ADMIN"
     const val ROLE_EMPLOYEE = "employee"
     const val ROLE_SITE_MANAGER = "site_manager"
     const val ROLE_SURVEYOR = "surveyor"
