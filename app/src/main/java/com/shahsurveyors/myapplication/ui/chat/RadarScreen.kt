@@ -39,6 +39,7 @@ import com.google.android.gms.location.Priority
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.SetOptions
 import com.shahsurveyors.myapplication.ui.theme.*
 import java.text.SimpleDateFormat
@@ -227,7 +228,7 @@ fun TeamChatView(userUid: String, userName: String) {
     var error by remember { mutableStateOf<String?>(null) }
 
     DisposableEffect(Unit) {
-        val registration = firestore.collection(TEAM_MESSAGES_COLLECTION).limitToLast(200).addSnapshotListener { snapshot, exception ->
+        val registration = firestore.collection(TEAM_MESSAGES_COLLECTION).orderBy("timestamp", Query.Direction.ASCENDING).limitToLast(200).addSnapshotListener { snapshot, exception ->
             if (exception != null) {
                 error = exception.message ?: "Unable to load team chat"
                 return@addSnapshotListener
