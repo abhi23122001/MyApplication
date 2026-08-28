@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.shahsurveyors.myapplication.R
+import com.shahsurveyors.myapplication.data.NotificationRepository
 import com.shahsurveyors.myapplication.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.*
@@ -46,11 +47,14 @@ fun DashboardScreen(
     onNavigateToProjects: () -> Unit = {},
     onNavigateToBroadcast: () -> Unit = {},
     isAdmin: Boolean = false,
+    notificationUid: String = "",
     onRefresh: () -> Unit = {}
 ) {
     val currentTime = remember { mutableStateOf("") }
     val currentDate = remember { mutableStateOf("") }
     var showNotifications by remember { mutableStateOf(false) }
+    var notificationCount by remember { mutableIntStateOf(0) }
+    val notificationRepository = remember { NotificationRepository() }
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -63,8 +67,9 @@ fun DashboardScreen(
         }
     }
 
-    val notificationCount = (if (viewModel.presentToday > 0) 1 else 0) +
-            (if (viewModel.noticeMessage.isNotBlank()) 1 else 0)
+    LaunchedEffect(notificationUid, isAdmin, showNotifications) {
+        notificationCount = notificationRepository.getUnreadCount(notificationUid, isAdmin)
+    }
 
     Scaffold(
         topBar = {
