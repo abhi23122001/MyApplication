@@ -7,7 +7,17 @@ service cloud.firestore {
     function myUser() { return get(/databases/$(database)/documents/users/$(myUid())).data; }
     function isActive() { return signedIn() && myUser().active == true; }
     function isAdmin() { return isActive() && myUser().role == 'ADMIN'; }
-    function hasAccess(module) { return isAdmin() || (isActive() && (myUser().access == 'ALL' || myUser().access.matches('(?i)(^|,)\\s*' + module + '\\s*(,|$)'))); }
+    function hasAccess(module) {
+      return isAdmin() || (
+        isActive() && (
+          myUser().access == 'ALL' ||
+          myUser().access.matches('(?i)(^|,)\\s*' + module + '\\s*(,|$)') ||
+          (module == 'EXPENSES' && myUser().access.matches('(?i)(^|,)\\s*EXPENSE\\s*(,|$)')) ||
+          (module == 'PAYROLL' && myUser().access.matches('(?i)(^|,)\\s*SALARY\\s*(,|$)')) ||
+          (module == 'ADVANCE' && myUser().access.matches('(?i)(^|,)\\s*ADVANCE_SALARY\\s*(,|$)'))
+        )
+      );
+    }
     function ownUid(data) { return data.uid == myUid() || data.userUid == myUid(); }
 
     match /users/{uid} {
@@ -39,9 +49,9 @@ service cloud.firestore {
     }
 
     match /advanceSalaryRequests/{id} {
-      allow read: if isAdmin() || (isActive() && hasAccess('PAYROLL') && ownUid(resource.data));
-      allow create: if isActive() && hasAccess('PAYROLL') && request.resource.data.userUid == myUid();
-      allow update: if isAdmin() || (isActive() && hasAccess('PAYROLL') && resource.data.userUid == myUid() && request.resource.data.userUid == myUid());
+      allow read: if isAdmin() || (isActive() && hasAccess('ADVANCE') && ownUid(resource.data));
+      allow create: if isActive() && hasAccess('ADVANCE') && request.resource.data.userUid == myUid();
+      allow update: if isAdmin() || (isActive() && hasAccess('ADVANCE') && resource.data.userUid == myUid() && request.resource.data.userUid == myUid());
       allow delete: if isAdmin();
     }
 
