@@ -18,7 +18,9 @@ service cloud.firestore {
         )
       );
     }
-    function ownUid(data) { return data.uid == myUid() || data.userUid == myUid(); }
+    function ownUid(data) {
+      return data.uid == myUid() || data.userUid == myUid() || data.employeeUid == myUid();
+    }
     function safeEmployeeAccess(access) {
       return access.matches('(?i)^[A-Z_]*(,[A-Z_]*)*$') &&
         !access.matches('(?i)(^|,)(ALL|ADMIN|ADMIN_HUB|PROJECTS|CLIENTS|BILLING|EQUIPMENT)(,|$)');
@@ -125,10 +127,7 @@ service cloud.firestore {
       allow update, delete: if isAdmin() || (isActive() && hasAccess('CHAT') && resource.data.senderUid == myUid() && request.resource.data.senderUid == myUid());
     }
 
-    match /announcements/{id} {
-      allow read, write: if isAdmin();
-    }
-
+    match /announcements/{id} { allow read, write: if isAdmin(); }
     match /equipment/{id} { allow read, write: if isAdmin(); }
     match /projects/{id} { allow read, write: if isAdmin(); }
     match /employees/{id} {
