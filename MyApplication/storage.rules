@@ -1,0 +1,54 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return signedIn() && (uid == request.auth.uid || request.auth.uid != null);
+    }
+
+    // Attendance selfies
+    match /attendance/{uid}/{fileName} {
+      allow read, write: if signedIn();
+    }
+    match /attendance/selfies/{uid}/{fileName} {
+      allow read, write: if signedIn();
+    }
+
+    // Expense receipts
+    match /expense_receipts/{uid}/{fileName} {
+      allow read, write: if signedIn();
+    }
+    match /expenses/receipts/{uid}/{fileName} {
+      allow read, write: if signedIn();
+    }
+
+    // DSR survey files & attachments
+    match /dsr_files/{uid}/{fileName} {
+      allow read, write: if signedIn();
+    }
+    match /dsr/photos/{uid}/{fileName} {
+      allow read, write: if signedIn();
+    }
+    match /dsr/{uid}/{fileName} {
+      allow read, write: if signedIn();
+    }
+
+    // Billing and invoices
+    match /billing/{allPaths=**} {
+      allow read, write: if signedIn();
+    }
+    match /invoices/{allPaths=**} {
+      allow read, write: if signedIn();
+    }
+
+    // General user uploads
+    match /{allPaths=**} {
+      allow read, write: if signedIn();
+    }
+  }
+}

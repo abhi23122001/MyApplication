@@ -93,6 +93,14 @@ fun MoreModulesScreen(
                         route = "attendance"
                     )
                 )
+                add(
+                    ModuleData(
+                        name = if (hasFullAccess) "Leave Approvals & History" else "My Leave Applications",
+                        description = "Apply for leave and track approvals",
+                        icon = Icons.Default.EventBusy,
+                        route = "leave"
+                    )
+                )
             }
 
             if (permittedPeople.isNotEmpty()) {

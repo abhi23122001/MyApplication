@@ -331,6 +331,18 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
 
+                            // Leave Applications & Approvals
+                            composable("leave") {
+                                com.shahsurveyors.myapplication.ui.leave.LeaveManagementScreen(
+                                    currentUid = authViewModel.userUid,
+                                    currentUserName = authViewModel.userName,
+                                    currentUserEmpId = authViewModel.userEmployeeId,
+                                    currentUserDept = authViewModel.userDepartment,
+                                    isAdmin = isAdmin,
+                                    onBack = { navController.popBackStack() }
+                                )
+                            }
+
                             // Billing
                             composable("billing") {
                                 val billingViewModel: BillingViewModel = viewModel(
