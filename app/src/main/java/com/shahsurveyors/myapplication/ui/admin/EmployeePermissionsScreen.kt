@@ -29,17 +29,23 @@ private val permissionModules = listOf(
     "REPORTS" to "Reports"
 )
 
+private val fixedEmployeeModules = setOf("ATTENDANCE", "TASKS", "CHAT", "LEAVE", "EXPENSE", "EXPENSES", "SALARY", "PAYROLL", "ADVANCE", "ADVANCE_SALARY", "DSR", "SURVEY")
+
 fun hasModuleAccess(access: String, module: String): Boolean {
     val values = access.split(",", ";", "|")
         .map { it.trim().uppercase() }
         .filter { it.isNotBlank() }
         .toSet()
     if (values.contains("ALL")) return true
-    return when (module.trim().uppercase()) {
+    val normalizedModule = module.trim().uppercase()
+    if (values.isNotEmpty() && values.none { it in setOf("ADMIN", "ADMIN_HUB", "PROJECTS", "CLIENTS", "BILLING", "EQUIPMENT") }) {
+        if (normalizedModule in fixedEmployeeModules) return true
+    }
+    return when (normalizedModule) {
         "EXPENSE", "EXPENSES" -> values.contains("EXPENSE") || values.contains("EXPENSES")
         "SALARY", "PAYROLL" -> values.contains("SALARY") || values.contains("PAYROLL")
         "ADVANCE", "ADVANCE_SALARY" -> values.contains("ADVANCE") || values.contains("ADVANCE_SALARY")
-        else -> values.contains(module.trim().uppercase())
+        else -> values.contains(normalizedModule)
     }
 }
 
@@ -82,8 +88,8 @@ fun EmployeePermissionsScreen(onBack: () -> Unit = {}) {
                 Icon(Icons.Default.Security, null)
                 Spacer(Modifier.width(8.dp))
                 Column(Modifier.weight(1f)) {
-                    Text("Module access control", style = MaterialTheme.typography.titleMedium)
-                    Text("Admin can enable or disable employee modules.", style = MaterialTheme.typography.bodySmall)
+                    Text("Employee access", style = MaterialTheme.typography.titleMedium)
+                    Text("Employee workforce modules are fixed. Admin-only modules remain restricted.", style = MaterialTheme.typography.bodySmall)
                 }
             }
             Spacer(Modifier.height(12.dp))
@@ -100,9 +106,7 @@ fun EmployeePermissionsScreen(onBack: () -> Unit = {}) {
                                 Text(employee.name.ifBlank { "Unnamed employee" }, style = MaterialTheme.typography.titleMedium)
                                 Text(employee.department, style = MaterialTheme.typography.bodySmall)
                                 Text(if (employee.active) "ACTIVE" else "INACTIVE", style = MaterialTheme.typography.labelSmall)
-                                Text(if (employee.access.isBlank()) "No module access" else "Access: ${employee.access}", style = MaterialTheme.typography.bodySmall)
-                                Spacer(Modifier.height(6.dp))
-                                Text("EDIT PERMISSIONS", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
+                                Text("Fixed employee access: Attendance • Tasks • Chat • Leave • Expense • Salary • Advance • DSR • Survey", style = MaterialTheme.typography.bodySmall)
                             }
                         }
                     }
@@ -112,11 +116,7 @@ fun EmployeePermissionsScreen(onBack: () -> Unit = {}) {
     }
 
     selected?.let { employee ->
-        PermissionEditorDialog(
-            employee = employee,
-            onDismiss = { selected = null },
-            onSaved = { selected = null; load() }
-        )
+        PermissionEditorDialog(employee = employee, onDismiss = { selected = null }, onSaved = { selected = null; load() })
     }
 }
 
@@ -136,18 +136,20 @@ private fun PermissionEditorDialog(employee: UserProfile, onDismiss: () -> Unit,
 
     AlertDialog(
         onDismissRequest = { if (!saving) onDismiss() },
-        title = { Text("Permissions — ${employee.name}") },
+        title = { Text("Employee access — ${employee.name}") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("Admin-only modules are never assignable to employees.", style = MaterialTheme.typography.bodySmall)
+                Text("These workforce modules are fixed for every active employee. Admin-only modules cannot be assigned here.", style = MaterialTheme.typography.bodySmall)
                 HorizontalDivider(Modifier.padding(vertical = 6.dp))
                 permissionModules.forEach { (key, label) ->
+                    val fixed = key in fixedEmployeeModules
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                         Checkbox(
-                            checked = hasModuleAccess(selected.joinToString(","), key),
+                            checked = fixed || hasModuleAccess(selected.joinToString(","), key),
                             onCheckedChange = { checked ->
-                                selected = if (checked) selected + key else selected - key
-                            }
+                                if (!fixed) selected = if (checked) selected + key else selected - key
+                            },
+                            enabled = !fixed
                         )
                         Text(label)
                     }
@@ -161,7 +163,7 @@ private fun PermissionEditorDialog(employee: UserProfile, onDismiss: () -> Unit,
                 error = null
                 scope.launch {
                     try {
-                        val access = selected.filter { it != "ALL" }.joinToString(",")
+                        val access = (selected + fixedEmployeeModules).filter { it !in setOf("ALL", "ADMIN", "ADMIN_HUB", "PROJECTS", "CLIENTS", "BILLING", "EQUIPMENT") }.joinToString(",")
                         repository.updateUserAccess(employee.uid, access)
                         onSaved()
                     } catch (e: Exception) {
