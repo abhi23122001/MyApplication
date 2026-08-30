@@ -10,10 +10,14 @@ initializeApp();
 const db = getFirestore();
 const adminAuth = getAuth();
 
+const EMPLOYEE_ACCESS = new Set([
+  "ATTENDANCE", "TASKS", "CHAT", "LEAVE", "EXPENSE", "SALARY", "ADVANCE", "DSR",
+  "SURVEY", "MARKETING", "REPORTS"
+]);
+const DEFAULT_EMPLOYEE_ACCESS = "ATTENDANCE,TASKS,CHAT,LEAVE,EXPENSE,SALARY,ADVANCE,DSR";
+
 async function requireActiveAdmin(callerUid) {
-  if (!callerUid) {
-    throw new HttpsError("unauthenticated", "Authentication required");
-  }
+  if (!callerUid) throw new HttpsError("unauthenticated", "Authentication required");
   const caller = await db.collection("users").doc(callerUid).get();
   const callerData = caller.data() || {};
   if (callerData.active !== true || String(callerData.role || "").trim().toUpperCase() !== "ADMIN") {
@@ -21,49 +25,41 @@ async function requireActiveAdmin(callerUid) {
   }
 }
 
-function normalizeAccess(access, fallback = "ATTENDANCE,CHAT") {
+function normalizeAccess(access, fallback = DEFAULT_EMPLOYEE_ACCESS) {
   const raw = String(access || fallback);
-  const values = raw
-    .split(/[,;|]/)
-    .map((value) => value.trim().toUpperCase())
-    .filter(Boolean);
+  const values = raw.split(/[,;|]/).map((value) => value.trim().toUpperCase()).filter(Boolean);
   return [...new Set(values)].join(",") || fallback;
+}
+
+function normalizeEmployeeAccess(access) {
+  const normalized = normalizeAccess(access);
+  const values = normalized.split(",").filter((value) => EMPLOYEE_ACCESS.has(value));
+  return values.length ? [...new Set(values)].join(",") : DEFAULT_EMPLOYEE_ACCESS;
 }
 
 async function resolveRecipients(data) {
   const directUid = String(data.recipientUid || "").trim();
   if (directUid) return [directUid];
-
   const targetRole = String(data.targetRole || "").trim().toLowerCase();
   const target = String(data.target || "").trim();
   const normalizedTarget = target.toUpperCase();
 
   if (targetRole === "admin" || normalizedTarget === "ADMIN") {
     const users = await db.collection("users").get();
-    return users.docs
-      .filter((doc) => String(doc.get("role") || "").trim().toLowerCase() === "admin")
-      .map((doc) => doc.id)
-      .filter(Boolean);
+    return users.docs.filter((doc) => String(doc.get("role") || "").trim().toLowerCase() === "admin").map((doc) => doc.id).filter(Boolean);
   }
-
   if (normalizedTarget === "ALL") {
     const users = await db.collection("users").get();
     return users.docs.filter((doc) => doc.get("active") !== false).map((doc) => doc.id).filter(Boolean);
   }
-
   if (normalizedTarget === "EMPLOYEE") {
     const users = await db.collection("users").get();
-    return users.docs
-      .filter((doc) => doc.get("active") !== false && String(doc.get("role") || "").trim().toLowerCase() !== "admin")
-      .map((doc) => doc.id)
-      .filter(Boolean);
+    return users.docs.filter((doc) => doc.get("active") !== false && String(doc.get("role") || "").trim().toLowerCase() !== "admin").map((doc) => doc.id).filter(Boolean);
   }
-
   if (normalizedTarget.startsWith("USER:")) {
     const uid = target.substring(target.indexOf(":") + 1).trim();
     return uid ? [uid] : [];
   }
-
   return [];
 }
 
@@ -72,7 +68,6 @@ async function sendNotification(data, sourceId, options = {}) {
   const title = String(data.title || "Shah ERP");
   const message = String(data.message || "New notification");
   const notificationId = String(sourceId || "");
-
   if (recipients.length === 0) return { deliveryStatus: "NO_RECIPIENT", recipientCount: 0, tokenCount: 0, successCount: 0, failureCount: 0 };
 
   const tokenDocs = await Promise.all(recipients.map((uid) => db.collection("users").doc(uid).get()));
@@ -96,23 +91,15 @@ async function sendNotification(data, sourceId, options = {}) {
     recipients.forEach((uid) => {
       const ref = db.collection("notifications").doc();
       batch.set(ref, {
-        type: String(data.type || "GENERAL"),
-        title,
-        message,
-        actorUid: String(data.actorUid || ""),
-        actorName: String(data.actorName || ""),
-        referenceId: String(data.referenceId || notificationId),
-        route: String(data.route || ""),
-        recipientUid: uid,
-        read: false,
-        fanout: true,
-        sourceNotificationId: notificationId,
+        type: String(data.type || "GENERAL"), title, message,
+        actorUid: String(data.actorUid || ""), actorName: String(data.actorName || ""),
+        referenceId: String(data.referenceId || notificationId), route: String(data.route || ""),
+        recipientUid: uid, read: false, fanout: true, sourceNotificationId: notificationId,
         createdAt: data.createdAt || FieldValue.serverTimestamp()
       });
     });
     await batch.commit();
   }
-
   return { deliveryStatus: "SENT", recipientCount: recipients.length, tokenCount: tokens.length, successCount: response.successCount, failureCount: response.failureCount };
 }
 
@@ -137,8 +124,6 @@ exports.sendShahErpAnnouncement = onDocumentCreated("announcements/{announcement
   logger.info("Shah ERP announcement processed", { announcementId, ...result });
 });
 
-// Creates the Firebase Auth account and its users/{uid} profile without
-// changing the currently signed-in Admin account on the Android client.
 exports.createEmployeeAccountAsAdmin = onCall(async (request) => {
   const callerUid = request.auth?.uid;
   await requireActiveAdmin(callerUid);
@@ -148,7 +133,7 @@ exports.createEmployeeAccountAsAdmin = onCall(async (request) => {
   const email = String(data.email || "").trim().toLowerCase();
   const password = String(data.password || "");
   const department = String(data.department || "SURVEY").trim().toUpperCase();
-  const access = normalizeAccess(data.access, "ATTENDANCE,CHAT");
+  const access = normalizeEmployeeAccess(data.access);
 
   if (!name || !email || !email.includes("@") || !password || password.length < 6 || !department) {
     throw new HttpsError("invalid-argument", "Valid employee name, email, password and department are required");
@@ -162,34 +147,23 @@ exports.createEmployeeAccountAsAdmin = onCall(async (request) => {
     });
     if (existing) throw new HttpsError("already-exists", "An account already exists for this email");
 
-    const userRecord = await adminAuth.createUser({
-      email,
-      password,
-      displayName: name
-    });
+    const userRecord = await adminAuth.createUser({ email, password, displayName: name });
     createdUid = userRecord.uid;
 
     await db.collection("users").doc(createdUid).set({
-      uid: createdUid,
-      name,
-      email,
-      role: "employee",
-      department,
-      access,
-      approved: true,
-      active: true,
-      createdAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp()
+      uid: createdUid, name, email, role: "employee", department, access,
+      approved: true, active: true,
+      createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()
     }, { merge: true });
 
     const profile = await db.collection("users").doc(createdUid).get();
-    if (!profile.exists || String(profile.get("uid") || "") !== createdUid) {
+    if (!profile.exists || String(profile.get("uid") || "") !== createdUid || String(profile.get("role") || "").toLowerCase() !== "employee") {
       throw new Error("Employee profile verification failed");
     }
-
     return { success: true, uid: createdUid };
   } catch (error) {
     if (createdUid) {
+      try { await db.collection("users").doc(createdUid).delete(); } catch (cleanupError) { logger.error("Employee profile cleanup failed", cleanupError); }
       try { await adminAuth.deleteUser(createdUid); } catch (cleanupError) { logger.error("Employee Auth cleanup failed", cleanupError); }
     }
     if (error instanceof HttpsError) throw error;
@@ -198,7 +172,6 @@ exports.createEmployeeAccountAsAdmin = onCall(async (request) => {
   }
 });
 
-// Secure server-side writer for an already-created Firebase Auth UID.
 exports.saveEmployeeProfileAsAdmin = onCall(async (request) => {
   const callerUid = request.auth?.uid;
   await requireActiveAdmin(callerUid);
@@ -206,31 +179,30 @@ exports.saveEmployeeProfileAsAdmin = onCall(async (request) => {
   const data = request.data || {};
   const uid = String(data.uid || "").trim();
   const name = String(data.name || "").trim();
-  const email = String(data.email || "").trim().toLowerCase();
   const department = String(data.department || "SURVEY").trim().toUpperCase();
-  const access = normalizeAccess(data.access);
+  const requestedEmail = String(data.email || "").trim().toLowerCase();
+  const access = normalizeEmployeeAccess(data.access);
 
-  if (!uid || !name || !email || !email.includes("@")) {
+  if (!uid || !name || !requestedEmail || !requestedEmail.includes("@")) {
     throw new HttpsError("invalid-argument", "Employee uid, name and email are required");
   }
   if (uid === callerUid) throw new HttpsError("invalid-argument", "An admin cannot create a profile for their own UID");
 
+  let authUser;
   try {
-    await adminAuth.getUser(uid);
+    authUser = await adminAuth.getUser(uid);
   } catch (error) {
     throw new HttpsError("failed-precondition", "Firebase Authentication user does not exist");
   }
 
+  const authEmail = String(authUser.email || "").trim().toLowerCase();
+  if (!authEmail || authEmail !== requestedEmail) {
+    throw new HttpsError("invalid-argument", "Employee email does not match Firebase Authentication");
+  }
+
   await db.collection("users").doc(uid).set({
-    uid,
-    name,
-    email,
-    role: "employee",
-    department,
-    access,
-    approved: true,
-    active: true,
-    updatedAt: FieldValue.serverTimestamp()
+    uid, name, email: authEmail, role: "employee", department, access,
+    approved: true, active: true, updatedAt: FieldValue.serverTimestamp()
   }, { merge: true });
 
   return { success: true, uid };
