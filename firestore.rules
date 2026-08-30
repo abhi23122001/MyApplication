@@ -7,8 +7,12 @@ service cloud.firestore {
     function myUser() { return get(/databases/$(database)/documents/users/$(myUid())).data; }
     function isActive() { return signedIn() && myUser().active == true; }
     function isAdmin() { return isActive() && myUser().role.matches('(?i)^ADMIN$'); }
+    function employeeModuleAccess(module) {
+      return isActive() && myUser().role.matches('(?i)^EMPLOYEE$') &&
+        module.matches('(?i)^(ATTENDANCE|TASKS|CHAT|LEAVE|EXPENSES?|PAYROLL|SALARY|ADVANCE|ADVANCE_SALARY|DSR|SURVEY)$');
+    }
     function hasAccess(module) {
-      return isAdmin() || (
+      return isAdmin() || employeeModuleAccess(module) || (
         isActive() && (
           myUser().get('access', '').matches('(?i)(^|,)\\s*ALL\\s*(,|$)') ||
           myUser().get('access', '').matches('(?i)(^|,)\\s*' + module + '\\s*(,|$)') ||
@@ -53,7 +57,7 @@ service cloud.firestore {
     }
 
     match /attendance/{id} {
-      allow read: if isAdmin() || (isActive() && hasAccess('ATTENDANCE') && ownUid(resource.data));
+      allow read: if isAdmin() || (isActive() && hasAccess('ATTENDANCE') && (resource == null || ownUid(resource.data)));
       allow create: if isAdmin() || (
         isActive() && hasAccess('ATTENDANCE') &&
         request.resource.data.uid == myUid() &&
@@ -148,37 +152,20 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
-    match /team_messages/{id} {
-      allow read: if isAdmin() || (isActive() && hasAccess('CHAT'));
-      allow create: if isAdmin() || (isActive() && hasAccess('CHAT') && request.resource.data.senderUid == myUid());
-      allow update, delete: if isAdmin() || (isActive() && hasAccess('CHAT') && resource.data.senderUid == myUid() && request.resource.data.senderUid == myUid());
-    }
-
-    match /direct_messages/{id} {
-      allow read: if isAdmin() || (isActive() && hasAccess('CHAT') && resource.data.participants.hasAny([myUid()]));
-      allow create: if isAdmin() || (isActive() && hasAccess('CHAT') && request.resource.data.senderUid == myUid() && request.resource.data.participants.hasAny([myUid()]));
-      allow update, delete: if isAdmin() || (isActive() && hasAccess('CHAT') && resource.data.senderUid == myUid() && request.resource.data.senderUid == myUid());
-    }
+    match /team_messages/{id} { allow read: if isAdmin() || (isActive() && hasAccess('CHAT')); allow create: if isAdmin() || (isActive() && hasAccess('CHAT') && request.resource.data.senderUid == myUid()); allow update, delete: if isAdmin() || (isActive() && hasAccess('CHAT') && resource.data.senderUid == myUid() && request.resource.data.senderUid == myUid()); }
+    match /direct_messages/{id} { allow read: if isAdmin() || (isActive() && hasAccess('CHAT') && resource.data.participants.hasAny([myUid()])); allow create: if isAdmin() || (isActive() && hasAccess('CHAT') && request.resource.data.senderUid == myUid() && request.resource.data.participants.hasAny([myUid()])); allow update, delete: if isAdmin() || (isActive() && hasAccess('CHAT') && resource.data.senderUid == myUid() && request.resource.data.senderUid == myUid()); }
 
     match /announcements/{id} { allow read, write: if isAdmin(); }
     match /equipment/{id} { allow read, write: if isAdmin(); }
     match /projects/{id} { allow read, write: if isAdmin(); }
-    match /employees/{id} {
-      allow read: if isAdmin() || (isActive() && resource.data.uid == myUid());
-      allow create, update, delete: if isAdmin();
-    }
+    match /employees/{id} { allow read: if isAdmin() || (isActive() && resource.data.uid == myUid()); allow create, update, delete: if isAdmin(); }
     match /clients/{id} { allow read, write: if isAdmin(); }
     match /billing/{id} { allow read, write: if isAdmin(); }
     match /invoices/{id} { allow read, write: if isAdmin(); }
 
     match /notifications/{id} {
       allow read: if signedIn() && (isAdmin() || resource.data.recipientUid == myUid() || resource.data.userUid == myUid() || resource.data.uid == myUid());
-      allow create: if isAdmin() || (
-        isActive() &&
-        request.resource.data.uid == myUid() &&
-        request.resource.data.targetRole.matches('(?i)^ADMIN$') &&
-        request.resource.data.get('recipientUid', '') == ''
-      );
+      allow create: if isAdmin() || (isActive() && request.resource.data.uid == myUid() && request.resource.data.targetRole.matches('(?i)^ADMIN$') && request.resource.data.get('recipientUid', '') == '');
       allow update, delete: if signedIn() && (isAdmin() || resource.data.recipientUid == myUid() || resource.data.userUid == myUid() || resource.data.uid == myUid());
     }
 
