@@ -1,0 +1,126 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function myUid() {
+      return request.auth.uid;
+    }
+
+    function myUser() {
+      return get(/databases/$(database)/documents/users/$(myUid())).data;
+    }
+
+    function isActive() {
+      return signedIn() && myUser().active == true;
+    }
+
+    function isAdmin() {
+      return isActive() && myUser().role == 'ADMIN';
+    }
+
+    function hasAccess(module) {
+      return isAdmin() || (isActive() && (myUser().access == 'ALL' || myUser().access.matches('(?i)(^|,)\\s*' + module + '\\s*(,|$)')));
+    }
+
+    function ownUid(data) {
+      return data.uid == myUid() || data.userUid == myUid();
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn() && (uid == myUid() || isAdmin());
+      allow create: if signedIn() && uid == myUid();
+      allow update: if signedIn() && ((uid == myUid() && request.resource.data.uid == myUid()) || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /attendance/{id} {
+      allow read: if isAdmin() || (isActive() && hasAccess('ATTENDANCE') && ownUid(resource.data));
+      allow create: if isAdmin() || (isActive() && hasAccess('ATTENDANCE') && request.resource.data.uid == myUid());
+      allow update: if isAdmin() || (isActive() && hasAccess('ATTENDANCE') && resource.data.uid == myUid() && request.resource.data.uid == myUid());
+      allow delete: if isAdmin();
+    }
+
+    match /expenses/{id} {
+      allow read: if isAdmin() || (isActive() && hasAccess('EXPENSES') && ownUid(resource.data));
+      allow create: if isAdmin() || (isActive() && hasAccess('EXPENSES') && request.resource.data.uid == myUid());
+      allow update: if isAdmin() || (isActive() && hasAccess('EXPENSES') && resource.data.uid == myUid() && request.resource.data.uid == myUid());
+      allow delete: if isAdmin() || (isActive() && hasAccess('EXPENSES') && resource.data.uid == myUid());
+    }
+
+    match /payroll/{id} {
+      allow read: if isAdmin() || (isActive() && hasAccess('PAYROLL') && ownUid(resource.data));
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /tasks/{id} {
+      allow read: if isAdmin() || (isActive() && hasAccess('TASKS') && resource.data.assignedToUid == myUid());
+      allow create: if isAdmin();
+      allow update: if isAdmin() || (isActive() && hasAccess('TASKS') && resource.data.assignedToUid == myUid() && request.resource.data.assignedToUid == myUid());
+      allow delete: if isAdmin();
+
+      match /history/{historyId} {
+        allow read: if isAdmin() || (isActive() && hasAccess('TASKS') && get(/databases/$(database)/documents/tasks/$(id)).data.assignedToUid == myUid());
+        allow create: if isAdmin() || (isActive() && hasAccess('TASKS') && get(/databases/$(database)/documents/tasks/$(id)).data.assignedToUid == myUid());
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    match /leaveRequests/{id} {
+      allow read: if isAdmin() || (isActive() && hasAccess('LEAVE') && resource.data.userUid == myUid());
+      allow create: if isActive() && hasAccess('LEAVE') && request.resource.data.userUid == myUid();
+      allow update: if isAdmin() || (isActive() && hasAccess('LEAVE') && resource.data.userUid == myUid() && request.resource.data.userUid == myUid());
+      allow delete: if isAdmin() || (isActive() && hasAccess('LEAVE') && resource.data.userUid == myUid());
+    }
+
+    match /dsr/{id} {
+      allow read: if isAdmin() || (isActive() && hasAccess('DSR') && resource.data.uid == myUid());
+      allow create: if isActive() && hasAccess('DSR') && request.resource.data.uid == myUid();
+      allow update: if isAdmin() || (isActive() && hasAccess('DSR') && resource.data.uid == myUid() && request.resource.data.uid == myUid());
+      allow delete: if isAdmin() || (isActive() && hasAccess('DSR') && resource.data.uid == myUid());
+    }
+
+    match /equipment/{id} {
+      allow read, write: if isAdmin();
+    }
+
+    match /projects/{id} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /employees/{id} {
+      allow read, write: if isAdmin() || (isActive() && resource.data.uid == myUid());
+    }
+
+    match /clients/{id} {
+      allow read, write: if isAdmin();
+    }
+
+    match /billing/{id} {
+      allow read, write: if isAdmin();
+    }
+
+    match /invoices/{id} {
+      allow read, write: if isAdmin();
+    }
+
+    match /notifications/{id} {
+      allow read: if signedIn() && (isAdmin() || resource.data.userUid == myUid() || resource.data.uid == myUid());
+      allow create: if signedIn() && (request.resource.data.userUid == myUid() || request.resource.data.uid == myUid());
+      allow update, delete: if signedIn() && (isAdmin() || resource.data.userUid == myUid() || resource.data.uid == myUid());
+    }
+
+    match /config/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
