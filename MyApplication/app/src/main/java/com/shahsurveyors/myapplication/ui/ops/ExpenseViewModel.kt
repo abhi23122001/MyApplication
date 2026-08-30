@@ -2,6 +2,7 @@ package com.shahsurveyors.myapplication.ui.ops
 
 import android.graphics.Bitmap
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
@@ -16,7 +17,21 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
-import java.util.UUID
+import java.text.SimpleDateFormat
+import java.util.*
+
+data class ExpenseItem(
+    val id: String = "",
+    val employeeUid: String = "",
+    val employeeName: String = "",
+    val amount: Double = 0.0,
+    val category: String = "",
+    val remarks: String = "",
+    val receiptUrl: String = "",
+    val status: String = "PENDING",
+    val submittedAt: Long = System.currentTimeMillis(),
+    val dateStr: String = ""
+)
 
 class ExpenseViewModel(
     private val notificationRepository: NotificationRepository = NotificationRepository()
@@ -28,9 +43,56 @@ class ExpenseViewModel(
     var statusMessage by mutableStateOf<String?>(null)
         private set
 
+    val expensesList = mutableStateListOf<ExpenseItem>()
+
     private val auth = FirebaseAuth.getInstance()
     private val firestore = FirebaseFirestore.getInstance()
     private val storage = FirebaseStorage.getInstance()
+
+    init {
+        loadMyExpenses()
+    }
+
+    fun loadMyExpenses() {
+        val currentUid = auth.currentUser?.uid ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val snapshot = firestore.collection("expenses")
+                    .whereEqualTo("employeeUid", currentUid)
+                    .get()
+                    .await()
+
+                val items = snapshot.documents.mapNotNull { doc ->
+                    val amount = doc.getDouble("amount") ?: (doc.get("amount") as? Long)?.toDouble() ?: 0.0
+                    val category = doc.getString("category") ?: "Other"
+                    val remarks = doc.getString("remarks") ?: ""
+                    val status = doc.getString("status") ?: "PENDING"
+                    val ts = doc.getLong("submittedAt") ?: System.currentTimeMillis()
+                    val sdf = SimpleDateFormat("dd MMM, hh:mm a", Locale.ENGLISH)
+                    val dateStr = sdf.format(Date(ts))
+                    ExpenseItem(
+                        id = doc.id,
+                        employeeUid = currentUid,
+                        employeeName = doc.getString("employeeName") ?: "",
+                        amount = amount,
+                        category = category,
+                        remarks = remarks,
+                        receiptUrl = doc.getString("receiptUrl") ?: "",
+                        status = status,
+                        submittedAt = ts,
+                        dateStr = dateStr
+                    )
+                }.sortedByDescending { it.submittedAt }
+
+                withContext(Dispatchers.Main) {
+                    expensesList.clear()
+                    expensesList.addAll(items)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
 
     fun submitClaim(
         amount: String,
@@ -94,11 +156,17 @@ class ExpenseViewModel(
 
                 // 2. FIRESTORE DOCUMENT
                 statusMessage = "Saving expense..."
-                val expenseId = firestore.collection("expenses").document().id
+                val expenseDoc = firestore.collection("expenses").document()
                 val empName = currentUser.displayName?.ifBlank { null } ?: "Staff User"
+                val currentTime = System.currentTimeMillis()
+                val sdf = SimpleDateFormat("dd MMM, hh:mm a", Locale.ENGLISH)
+                val dateStr = sdf.format(Date(currentTime))
 
                 val expenseData = hashMapOf(
-                    "id" to expenseId,
+                    "id" to expenseDoc.id,
+                    "uid" to uid,
+                    "userUid" to uid,
+                    "employeeUid" to uid,
                     "employeeId" to uid,
                     "employeeName" to empName,
                     "employeeEmail" to (currentUser.email ?: ""),
@@ -109,11 +177,29 @@ class ExpenseViewModel(
                     "status" to "PENDING",
                     "approvedBy" to "",
                     "approvedAt" to null,
-                    "createdAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
-                    "updatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+                    "submittedAt" to currentTime,
+                    "createdAt" to currentTime,
+                    "updatedAt" to currentTime
                 )
 
-                firestore.collection("expenses").document(expenseId).set(expenseData).await()
+                expenseDoc.set(expenseData).await()
+
+                // Add to local list immediately
+                expensesList.add(
+                    0,
+                    ExpenseItem(
+                        id = expenseDoc.id,
+                        employeeUid = uid,
+                        employeeName = empName,
+                        amount = amountValue,
+                        category = category,
+                        remarks = remarks,
+                        receiptUrl = receiptUrl,
+                        status = "PENDING",
+                        submittedAt = currentTime,
+                        dateStr = dateStr
+                    )
+                )
 
                 // 3. SEND ALERT NOTIFICATION TO ADMIN
                 try {

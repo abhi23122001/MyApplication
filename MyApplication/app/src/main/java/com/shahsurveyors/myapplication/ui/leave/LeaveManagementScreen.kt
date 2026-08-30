@@ -24,9 +24,8 @@ import com.shahsurveyors.myapplication.data.LeaveRepository
 import com.shahsurveyors.myapplication.models.LeaveRequest
 import com.shahsurveyors.myapplication.ui.theme.*
 import kotlinx.coroutines.launch
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
-import java.time.temporal.ChronoUnit
+import java.text.SimpleDateFormat
+import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -357,7 +356,8 @@ fun ApplyLeaveDialog(
     onDismiss: () -> Unit,
     onSubmit: (startDate: String, endDate: String, totalDays: Int, type: String, reason: String) -> Unit
 ) {
-    val today = remember { LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd")) }
+    val sdf = remember { SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH) }
+    val today = remember { sdf.format(Date()) }
     var startDate by remember { mutableStateOf(today) }
     var endDate by remember { mutableStateOf(today) }
     var leaveType by remember { mutableStateOf("CASUAL") }
@@ -435,9 +435,10 @@ fun ApplyLeaveDialog(
                             return@Button
                         }
                         val days = try {
-                            val d1 = LocalDate.parse(startDate.trim(), DateTimeFormatter.ofPattern("yyyy-MM-dd"))
-                            val d2 = LocalDate.parse(endDate.trim(), DateTimeFormatter.ofPattern("yyyy-MM-dd"))
-                            maxOf(1, ChronoUnit.DAYS.between(d1, d2).toInt() + 1)
+                            val d1 = sdf.parse(startDate.trim())?.time ?: System.currentTimeMillis()
+                            val d2 = sdf.parse(endDate.trim())?.time ?: System.currentTimeMillis()
+                            val diffDays = ((d2 - d1) / (1000 * 60 * 60 * 24)).toInt()
+                            maxOf(1, diffDays + 1)
                         } catch (e: Exception) {
                             1
                         }
