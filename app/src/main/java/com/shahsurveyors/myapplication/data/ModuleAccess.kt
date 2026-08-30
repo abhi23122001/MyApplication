@@ -6,6 +6,7 @@ object ModuleAccess {
         "attendance" to setOf("ATTENDANCE"),
         "expense" to setOf("EXPENSE", "EXPENSES"),
         "salary" to setOf("PAYROLL", "SALARY"),
+        "advance_salary" to setOf("ADVANCE", "ADVANCE_SALARY"),
         "tasks" to setOf("TASKS", "TASK"),
         "marketing" to setOf("MARKETING"),
         "survey" to setOf("SURVEY"),
@@ -41,6 +42,6 @@ object ModuleAccess {
             .map { it.trim().uppercase().replace(' ', '_') }
             .filter { it.isNotBlank() }
             .toSet()
-        return required.any(granted::contains)
+        return "ALL" in granted || required.any(granted::contains)
     }
 }
