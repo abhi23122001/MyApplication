@@ -97,7 +97,7 @@ class UserRepository(
         val result = functions.getHttpsCallable("createEmployeeAccountAsAdmin")
             .call(data)
             .await()
-        val uid = (result.data as? Map<*, *>)?.get("uid")?.toString().orEmpty()
+        val uid = (result.getData() as? Map<*, *>)?.get("uid")?.toString().orEmpty()
         require(uid.isNotBlank()) { "Employee account was created without a UID" }
         return uid
     }
