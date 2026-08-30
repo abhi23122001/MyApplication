@@ -40,6 +40,27 @@ class UserRepository(
         usersCollection.document(currentUid).set(profile.copy(uid = currentUid), SetOptions.merge()).await()
     }
 
+    /**
+     * Creates the Firestore profile for an employee whose Firebase Auth account
+     * was created by the authorized admin flow. The caller must still be signed
+     * in as an active ADMIN; the employee UID is never treated as the caller UID.
+     */
+    suspend fun saveEmployeeProfileAsAdmin(profile: UserProfile) {
+        requireAdminUid()
+        require(profile.uid.isNotBlank()) { "Employee UID is required" }
+        require(!profile.role.equals(FirebaseConstants.ROLE_ADMIN, ignoreCase = true)) {
+            "Employee profile cannot be created as ADMIN"
+        }
+        usersCollection.document(profile.uid).set(
+            profile.copy(
+                role = "employee",
+                approved = true,
+                active = true
+            ),
+            SetOptions.merge()
+        ).await()
+    }
+
     suspend fun getAllEmployees(): List<UserProfile> {
         requireAdminUid()
         return usersCollection.get().await().toObjects(UserProfile::class.java)
