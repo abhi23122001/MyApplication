@@ -17,6 +17,7 @@ import com.shahsurveyors.myapplication.data.UserRepository
 import com.shahsurveyors.myapplication.models.UserProfile
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 
 class AuthViewModel(
     private val authRepository: AuthRepository,
@@ -40,26 +41,18 @@ class AuthViewModel(
         viewModelScope.launch {
             try {
                 val firebaseUser = authRepository.currentUser
-                if (firebaseUser != null) {
-                    currentUserUid = firebaseUser.uid
-                    loadUserFromFirestore(firebaseUser.uid)
-                } else {
-                    val session = sessionManager.userSession.first()
-                    val uid = session["uid"]
-                    if (!uid.isNullOrBlank()) {
-                        currentUserUid = uid
-                        userName = session["name"] ?: ""
-                        userRole = session["role"].orEmpty().trim()
-                        userAccess = session["access"] ?: ""
-                        userDepartment = session["dept"] ?: ""
-                        isUserLoggedIn = true
-                        userStatus = "APPROVED"
-                        registerFcmToken(uid)
-                    }
+                if (firebaseUser == null) {
+                    sessionManager.clearSession()
+                    isUserLoggedIn = false
+                    return@launch
                 }
+                currentUserUid = firebaseUser.uid
+                loadUserFromFirestore(firebaseUser.uid)
             } catch (e: Exception) {
+                sessionManager.clearSession()
                 isUserLoggedIn = false
-                authError = e.localizedMessage
+                currentUserUid = null
+                authError = e.localizedMessage ?: "Unable to restore your account session."
             }
         }
     }
@@ -81,12 +74,13 @@ class AuthViewModel(
                     return@launch
                 }
                 authRepository.signIn(cleanEmail, pass)
-                val uid = authRepository.currentUser?.uid ?: throw Exception("Auth failed")
+                val uid = authRepository.currentUser?.uid ?: throw Exception("Authentication failed")
                 currentUserUid = uid
                 loadUserFromFirestore(uid)
             } catch (e: Exception) {
-                authError = e.localizedMessage
+                authError = e.localizedMessage ?: "Unable to sign in."
                 isUserLoggedIn = false
+                currentUserUid = null
             } finally {
                 isLoading = false
             }
@@ -101,7 +95,15 @@ class AuthViewModel(
             isUserLoggedIn = false
             currentUserUid = null
             userStatus = "PENDING"
-            authError = "Profile not found."
+            authError = "Your account profile was not found. Please contact Admin."
+            return
+        }
+        if (profile.uid != uid) {
+            authRepository.signOut()
+            sessionManager.clearSession()
+            isUserLoggedIn = false
+            currentUserUid = null
+            authError = "Account identity verification failed."
             return
         }
         if (!profile.active) {
@@ -163,15 +165,34 @@ class AuthViewModel(
         viewModelScope.launch {
             isLoading = true
             authError = null
+            var createdUid: String? = null
             try {
-                if (name.isBlank() || email.isBlank() || pass.length < 6 || dept.isBlank()) {
+                val cleanName = name.trim()
+                val cleanEmail = email.trim()
+                val cleanDept = dept.trim().uppercase()
+                if (cleanName.isBlank() || !Patterns.EMAIL_ADDRESS.matcher(cleanEmail).matches() || pass.length < 6 || cleanDept.isBlank()) {
                     authError = "Invalid input details."
                     return@launch
                 }
-                authRepository.signUp(email, pass)
+                authRepository.signUp(cleanEmail, pass)
                 val uid = authRepository.currentUser?.uid ?: throw Exception("Signup failed")
-                val profile = UserProfile(uid = uid, name = name, email = email, department = dept.uppercase(), role = "employee", approved = false, active = true)
-                userRepository.saveUserProfile(profile)
+                createdUid = uid
+                val profile = UserProfile(
+                    uid = uid,
+                    name = cleanName,
+                    email = cleanEmail,
+                    department = cleanDept,
+                    role = "employee",
+                    access = "",
+                    approved = false,
+                    active = true
+                )
+                try {
+                    userRepository.saveUserProfile(profile)
+                } catch (profileError: Exception) {
+                    runCatching { authRepository.currentUser?.delete()?.await() }
+                    throw profileError
+                }
                 authRepository.signOut()
                 sessionManager.clearSession()
                 isUserLoggedIn = false
@@ -179,7 +200,10 @@ class AuthViewModel(
                 userStatus = "PENDING"
                 authError = "Registration submitted. Waiting for approval."
             } catch (e: Exception) {
-                authError = e.localizedMessage
+                if (createdUid != null && authRepository.currentUser?.uid == createdUid) {
+                    runCatching { authRepository.currentUser?.delete()?.await() }
+                }
+                authError = e.localizedMessage ?: "Unable to complete registration."
             } finally {
                 isLoading = false
             }
