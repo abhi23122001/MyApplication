@@ -15,7 +15,6 @@ import com.shahsurveyors.myapplication.data.FirebaseConstants
 import com.shahsurveyors.myapplication.data.SessionManager
 import com.shahsurveyors.myapplication.data.UserRepository
 import com.shahsurveyors.myapplication.models.UserProfile
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
@@ -49,6 +48,7 @@ class AuthViewModel(
                 currentUserUid = firebaseUser.uid
                 loadUserFromFirestore(firebaseUser.uid)
             } catch (e: Exception) {
+                authRepository.signOut()
                 sessionManager.clearSession()
                 isUserLoggedIn = false
                 currentUserUid = null
@@ -78,6 +78,8 @@ class AuthViewModel(
                 currentUserUid = uid
                 loadUserFromFirestore(uid)
             } catch (e: Exception) {
+                authRepository.signOut()
+                sessionManager.clearSession()
                 authError = e.localizedMessage ?: "Unable to sign in."
                 isUserLoggedIn = false
                 currentUserUid = null
@@ -89,6 +91,8 @@ class AuthViewModel(
 
     private suspend fun loadUserFromFirestore(uid: String) {
         val profile = userRepository.getUserProfile(uid)
+        val authEmail = authRepository.currentUser?.email?.trim()?.lowercase().orEmpty()
+        val profileEmail = profile?.email?.trim()?.lowercase().orEmpty()
         if (profile == null) {
             authRepository.signOut()
             sessionManager.clearSession()
@@ -98,7 +102,7 @@ class AuthViewModel(
             authError = "Your account profile was not found. Please contact Admin."
             return
         }
-        if (profile.uid != uid) {
+        if (profile.uid != uid || authEmail.isBlank() || profileEmail != authEmail) {
             authRepository.signOut()
             sessionManager.clearSession()
             isUserLoggedIn = false
