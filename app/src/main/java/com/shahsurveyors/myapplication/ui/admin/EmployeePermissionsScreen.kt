@@ -13,47 +13,33 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.shahsurveyors.myapplication.data.UserRepository
 import com.shahsurveyors.myapplication.models.UserProfile
+import kotlinx.coroutines.launch
 
 private val permissionModules = listOf(
-    "ATTENDANCE" to "Attendance",
-    "CHAT" to "Team Chat",
-    "PROJECTS" to "Projects",
-    "EXPENSE" to "Expenses",
-    "DSR" to "Daily Status Report",
-    "EQUIPMENT" to "Equipment",
+    "ATTENDANCE" to "Attendance / Punch In-Out",
     "TASKS" to "Tasks",
-    "SURVEY" to "Survey Calculator",
-    "BILLING" to "Quotation / Billing",
-    "CLIENTS" to "Clients",
-    "MARKETING" to "Marketing",
+    "CHAT" to "Team / Personal Chat",
     "LEAVE" to "Leave",
-    "ADVANCE" to "Advance Salary",
+    "EXPENSE" to "Expenses",
     "SALARY" to "Salary & Payroll",
+    "ADVANCE" to "Advance Salary",
+    "DSR" to "Daily Status Report",
+    "SURVEY" to "Survey Calculator",
+    "MARKETING" to "Marketing",
     "REPORTS" to "Reports"
 )
 
-/**
- * One permission vocabulary is used by the UI and Firestore rules. A few
- * legacy aliases are accepted so older profiles keep working after an
- * employee's permissions are edited.
- */
 fun hasModuleAccess(access: String, module: String): Boolean {
-    val values = access
-        .split(",", ";", "|")
+    val values = access.split(",", ";", "|")
         .map { it.trim().uppercase() }
         .filter { it.isNotBlank() }
         .toSet()
     if (values.contains("ALL")) return true
-
-    val requested = module.trim().uppercase()
-    return when (requested) {
-        "EXPENSES" -> values.contains("EXPENSE") || values.contains("EXPENSES")
-        "EXPENSE" -> values.contains("EXPENSE") || values.contains("EXPENSES")
-        "PAYROLL" -> values.contains("SALARY") || values.contains("PAYROLL")
-        "SALARY" -> values.contains("SALARY") || values.contains("PAYROLL")
-        "ADVANCE_SALARY" -> values.contains("ADVANCE") || values.contains("ADVANCE_SALARY")
-        "ADVANCE" -> values.contains("ADVANCE") || values.contains("ADVANCE_SALARY")
-        else -> values.contains(requested)
+    return when (module.trim().uppercase()) {
+        "EXPENSE", "EXPENSES" -> values.contains("EXPENSE") || values.contains("EXPENSES")
+        "SALARY", "PAYROLL" -> values.contains("SALARY") || values.contains("PAYROLL")
+        "ADVANCE", "ADVANCE_SALARY" -> values.contains("ADVANCE") || values.contains("ADVANCE_SALARY")
+        else -> values.contains(module.trim().uppercase())
     }
 }
 
@@ -61,6 +47,7 @@ fun hasModuleAccess(access: String, module: String): Boolean {
 @Composable
 fun EmployeePermissionsScreen(onBack: () -> Unit = {}) {
     val repository = remember { UserRepository() }
+    val scope = rememberCoroutineScope()
     var employees by remember { mutableStateOf<List<UserProfile>>(emptyList()) }
     var selected by remember { mutableStateOf<UserProfile?>(null) }
     var loading by remember { mutableStateOf(true) }
@@ -69,12 +56,12 @@ fun EmployeePermissionsScreen(onBack: () -> Unit = {}) {
     fun load() {
         loading = true
         error = null
-        kotlinx.coroutines.MainScope().launch {
+        scope.launch {
             try {
                 employees = repository.getAllEmployeesForReports()
-                loading = false
             } catch (e: Exception) {
                 error = e.localizedMessage ?: "Unable to load employees"
+            } finally {
                 loading = false
             }
         }
@@ -96,7 +83,7 @@ fun EmployeePermissionsScreen(onBack: () -> Unit = {}) {
                 Spacer(Modifier.width(8.dp))
                 Column(Modifier.weight(1f)) {
                     Text("Module access control", style = MaterialTheme.typography.titleMedium)
-                    Text("Admin can enable or disable each module for every employee.", style = MaterialTheme.typography.bodySmall)
+                    Text("Admin can enable or disable employee modules.", style = MaterialTheme.typography.bodySmall)
                 }
             }
             Spacer(Modifier.height(12.dp))
@@ -133,13 +120,12 @@ fun EmployeePermissionsScreen(onBack: () -> Unit = {}) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PermissionEditorDialog(employee: UserProfile, onDismiss: () -> Unit, onSaved: () -> Unit) {
     val repository = remember { UserRepository() }
+    val scope = rememberCoroutineScope()
     val initial = remember(employee.uid) {
-        employee.access
-            .split(",", ";", "|")
+        employee.access.split(",", ";", "|")
             .map { it.trim().uppercase() }
             .filter { it.isNotBlank() }
             .toSet()
@@ -153,7 +139,7 @@ private fun PermissionEditorDialog(employee: UserProfile, onDismiss: () -> Unit,
         title = { Text("Permissions — ${employee.name}") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("Choose exactly which modules this employee can open.", style = MaterialTheme.typography.bodySmall)
+                Text("Admin-only modules are never assignable to employees.", style = MaterialTheme.typography.bodySmall)
                 HorizontalDivider(Modifier.padding(vertical = 6.dp))
                 permissionModules.forEach { (key, label) ->
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -173,7 +159,7 @@ private fun PermissionEditorDialog(employee: UserProfile, onDismiss: () -> Unit,
             Button(enabled = !saving, onClick = {
                 saving = true
                 error = null
-                kotlinx.coroutines.MainScope().launch {
+                scope.launch {
                     try {
                         val access = selected.filter { it != "ALL" }.joinToString(",")
                         repository.updateUserAccess(employee.uid, access)
