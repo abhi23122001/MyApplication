@@ -81,15 +81,14 @@ fun MainScaffold(currentRoute: String?, onNavigate: (String) -> Unit, content: @
             }
     }
 
-    val isAdmin = role.equals("admin", ignoreCase = true)
     fun allowed(route: String?): Boolean {
         if (route == null || route == "dashboard" || route == "more" || route == "splash" || route == "login" || route == "signup") return true
         val module = routeModule(route) ?: return false
-        return isAdmin || hasModuleAccess(access, module)
+        return hasModuleAccess(access, module)
     }
 
     val items = listOf(BottomNavItem.Home, BottomNavItem.Attendance, BottomNavItem.Employees, BottomNavItem.Chat, BottomNavItem.More)
-        .filter { it.module == null || isAdmin || hasModuleAccess(access, it.module) }
+        .filter { it.module == null || hasModuleAccess(access, it.module) }
 
     Scaffold(
         bottomBar = {
