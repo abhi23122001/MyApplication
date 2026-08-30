@@ -19,12 +19,33 @@ service cloud.firestore {
       );
     }
     function ownUid(data) { return data.uid == myUid() || data.userUid == myUid(); }
+    function safeEmployeeAccess(access) {
+      return access.matches('(?i)^[A-Z_]*(,[A-Z_]*)*$') &&
+        !access.matches('(?i)(^|,)(ALL|ADMIN|ADMIN_HUB|PROJECTS|CLIENTS|BILLING|EQUIPMENT)(,|$)');
+    }
 
     match /users/{uid} {
       allow read: if signedIn() && (uid == myUid() || isAdmin());
-      allow create: if isAdmin() && uid != myUid() && request.resource.data.uid == uid && !request.resource.data.role.matches('(?i)^ADMIN$');
-      allow create: if signedIn() && uid == myUid() && !request.resource.data.role.matches('(?i)^ADMIN$') && !request.resource.data.access.matches('(?i)(^|,)\\s*ALL\\s*(,|$)');
-      allow update: if isAdmin() || (signedIn() && uid == myUid() && request.resource.data.uid == myUid() && request.resource.data.role == resource.data.role && request.resource.data.active == resource.data.active && request.resource.data.access == resource.data.access);
+      allow create: if isAdmin() && uid != myUid() && request.resource.data.uid == uid &&
+        request.resource.data.role.matches('(?i)^EMPLOYEE$') &&
+        request.resource.data.active == true && request.resource.data.approved == true &&
+        safeEmployeeAccess(request.resource.data.access);
+      allow create: if signedIn() && uid == myUid() &&
+        request.resource.data.uid == myUid() &&
+        request.resource.data.role.matches('(?i)^EMPLOYEE$') &&
+        request.resource.data.active == true && request.resource.data.approved == false &&
+        request.resource.data.access == '';
+      allow update: if isAdmin();
+      allow update: if signedIn() && uid == myUid() &&
+        request.resource.data.uid == resource.data.uid &&
+        request.resource.data.role == resource.data.role &&
+        request.resource.data.active == resource.data.active &&
+        request.resource.data.approved == resource.data.approved &&
+        request.resource.data.access == resource.data.access &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'fcmToken', 'fcmTokenUpdatedAt', 'latitude', 'longitude',
+          'locationSharing', 'lastLocationAt'
+        ]);
       allow delete: if isAdmin();
     }
 
@@ -37,8 +58,8 @@ service cloud.firestore {
 
     match /attendance_correction_requests/{id} {
       allow read: if isAdmin() || (isActive() && hasAccess('ATTENDANCE') && ownUid(resource.data));
-      allow create: if isActive() && hasAccess('ATTENDANCE') && request.resource.data.userUid == myUid();
-      allow update: if isAdmin() || (isActive() && hasAccess('ATTENDANCE') && resource.data.userUid == myUid() && request.resource.data.userUid == myUid());
+      allow create: if isActive() && hasAccess('ATTENDANCE') && ownUid(request.resource.data);
+      allow update: if isAdmin() || (isActive() && hasAccess('ATTENDANCE') && ownUid(resource.data) && ownUid(request.resource.data));
       allow delete: if isAdmin();
     }
 
@@ -51,12 +72,17 @@ service cloud.firestore {
 
     match /advanceSalaryRequests/{id} {
       allow read: if isAdmin() || (isActive() && hasAccess('ADVANCE') && ownUid(resource.data));
-      allow create: if isActive() && hasAccess('ADVANCE') && request.resource.data.userUid == myUid();
-      allow update: if isAdmin() || (isActive() && hasAccess('ADVANCE') && resource.data.userUid == myUid() && request.resource.data.userUid == myUid());
+      allow create: if isActive() && hasAccess('ADVANCE') && ownUid(request.resource.data);
+      allow update: if isAdmin() || (isActive() && hasAccess('ADVANCE') && ownUid(resource.data) && ownUid(request.resource.data));
       allow delete: if isAdmin();
     }
 
     match /payroll/{id} {
+      allow read: if isAdmin() || (isActive() && hasAccess('PAYROLL') && ownUid(resource.data));
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /salaryProfiles/{id} {
       allow read: if isAdmin() || (isActive() && hasAccess('PAYROLL') && ownUid(resource.data));
       allow create, update, delete: if isAdmin();
     }
@@ -74,17 +100,33 @@ service cloud.firestore {
     }
 
     match /leaveRequests/{id} {
-      allow read: if isAdmin() || (isActive() && hasAccess('LEAVE') && resource.data.userUid == myUid());
-      allow create: if isActive() && hasAccess('LEAVE') && request.resource.data.userUid == myUid();
-      allow update: if isAdmin() || (isActive() && hasAccess('LEAVE') && resource.data.userUid == myUid() && request.resource.data.userUid == myUid());
-      allow delete: if isAdmin() || (isActive() && hasAccess('LEAVE') && resource.data.userUid == myUid());
+      allow read: if isAdmin() || (isActive() && hasAccess('LEAVE') && ownUid(resource.data));
+      allow create: if isActive() && hasAccess('LEAVE') && ownUid(request.resource.data);
+      allow update: if isAdmin() || (isActive() && hasAccess('LEAVE') && ownUid(resource.data) && ownUid(request.resource.data));
+      allow delete: if isAdmin() || (isActive() && hasAccess('LEAVE') && ownUid(resource.data));
     }
 
     match /dsr/{id} {
-      allow read: if isAdmin() || (isActive() && hasAccess('DSR') && resource.data.uid == myUid());
+      allow read: if isAdmin() || (isActive() && hasAccess('DSR') && ownUid(resource.data));
       allow create: if isActive() && hasAccess('DSR') && request.resource.data.uid == myUid();
       allow update: if isAdmin() || (isActive() && hasAccess('DSR') && resource.data.uid == myUid() && request.resource.data.uid == myUid());
       allow delete: if isAdmin() || (isActive() && hasAccess('DSR') && resource.data.uid == myUid());
+    }
+
+    match /team_messages/{id} {
+      allow read: if isAdmin() || (isActive() && hasAccess('CHAT'));
+      allow create: if isAdmin() || (isActive() && hasAccess('CHAT') && request.resource.data.senderUid == myUid());
+      allow update, delete: if isAdmin() || (isActive() && hasAccess('CHAT') && resource.data.senderUid == myUid() && request.resource.data.senderUid == myUid());
+    }
+
+    match /direct_messages/{id} {
+      allow read: if isAdmin() || (isActive() && hasAccess('CHAT') && resource.data.participants.hasAny([myUid()]));
+      allow create: if isAdmin() || (isActive() && hasAccess('CHAT') && request.resource.data.senderUid == myUid() && request.resource.data.participants.hasAny([myUid()]));
+      allow update, delete: if isAdmin() || (isActive() && hasAccess('CHAT') && resource.data.senderUid == myUid() && request.resource.data.senderUid == myUid());
+    }
+
+    match /announcements/{id} {
+      allow read, write: if isAdmin();
     }
 
     match /equipment/{id} { allow read, write: if isAdmin(); }
@@ -96,11 +138,13 @@ service cloud.firestore {
     match /clients/{id} { allow read, write: if isAdmin(); }
     match /billing/{id} { allow read, write: if isAdmin(); }
     match /invoices/{id} { allow read, write: if isAdmin(); }
+
     match /notifications/{id} {
-      allow read: if signedIn() && (isAdmin() || resource.data.userUid == myUid() || resource.data.uid == myUid());
-      allow create: if signedIn() && (request.resource.data.userUid == myUid() || request.resource.data.uid == myUid());
-      allow update, delete: if signedIn() && (isAdmin() || resource.data.userUid == myUid() || resource.data.uid == myUid());
+      allow read: if signedIn() && (isAdmin() || resource.data.recipientUid == myUid() || resource.data.userUid == myUid() || resource.data.uid == myUid());
+      allow create: if isAdmin() || (signedIn() && (request.resource.data.userUid == myUid() || request.resource.data.uid == myUid()));
+      allow update, delete: if signedIn() && (isAdmin() || resource.data.recipientUid == myUid() || resource.data.userUid == myUid() || resource.data.uid == myUid());
     }
+
     match /config/{id} { allow read: if signedIn(); allow write: if isAdmin(); }
     match /{document=**} { allow read, write: if false; }
   }
