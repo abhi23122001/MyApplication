@@ -48,8 +48,7 @@ fun MoreModulesScreen(onNavigate: (String) -> Unit, onLogout: () -> Unit = {}) {
             .addOnFailureListener { loaded = true }
     }
 
-    val isAdmin = role.equals("admin", ignoreCase = true)
-    fun allowed(module: ModuleData): Boolean = isAdmin || hasModuleAccess(access, module.permission)
+    fun allowed(module: ModuleData): Boolean = hasModuleAccess(access, module.permission)
     val visiblePeople = peopleModules.filter(::allowed)
     val visibleProjects = projectModules.filter(::allowed)
     val visibleFinance = financeModules.filter(::allowed)
