@@ -24,6 +24,11 @@ class AuthViewModel(
     private val sessionManager: SessionManager
 ) : ViewModel() {
 
+    companion object {
+        // Employee access is intentionally fixed. Admin remains the only role with administrative modules.
+        private const val FIXED_EMPLOYEE_ACCESS = "ATTENDANCE,TASKS,CHAT,LEAVE,EXPENSE,SALARY,ADVANCE,DSR,SURVEY"
+    }
+
     var isLoading by mutableStateOf(false)
     var authError by mutableStateOf<String?>(null)
     var isUserLoggedIn by mutableStateOf(false)
@@ -133,17 +138,22 @@ class AuthViewModel(
 
     private suspend fun saveUserSession(profile: UserProfile) {
         val normalizedRole = profile.role.trim()
+        val effectiveAccess = if (normalizedRole.equals(FirebaseConstants.ROLE_ADMIN, ignoreCase = true)) {
+            profile.access
+        } else {
+            FIXED_EMPLOYEE_ACCESS
+        }
         sessionManager.saveSession(
             uid = profile.uid,
             email = profile.email,
             name = profile.name,
             role = normalizedRole,
             dept = profile.department,
-            access = profile.access
+            access = effectiveAccess
         )
         userName = profile.name
         userRole = normalizedRole
-        userAccess = profile.access
+        userAccess = effectiveAccess
         userDepartment = profile.department
         userStatus = "APPROVED"
         isUserLoggedIn = true
