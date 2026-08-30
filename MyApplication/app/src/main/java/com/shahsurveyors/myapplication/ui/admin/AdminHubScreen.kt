@@ -1,13 +1,16 @@
 package com.shahsurveyors.myapplication.ui.admin
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -16,14 +19,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.shahsurveyors.myapplication.ui.components.GlassCard
 import com.shahsurveyors.myapplication.ui.components.GlobalAsyncLoader
-import com.shahsurveyors.myapplication.ui.theme.DeepMidnightSlate
-import com.shahsurveyors.myapplication.ui.theme.ElectricGold
+import com.shahsurveyors.myapplication.ui.theme.*
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(
+    ExperimentalMaterial3Api::class,
+    ExperimentalLayoutApi::class
+)
 @Composable
-fun AdminHubScreen(viewModel: AdminViewModel = viewModel(), onBack: () -> Unit) {
+fun AdminHubScreen(
+    viewModel: AdminViewModel = viewModel(),
+    onBack: () -> Unit,
+    onNavigateToCompanySettings: () -> Unit = {},
+    onNavigateToBankDetails: () -> Unit = {},
+    onNavigateToTerms: () -> Unit = {}
+) {
     var showCreateUserDialog by remember { mutableStateOf(false) }
     var selectedTab by remember { mutableIntStateOf(0) }
 
@@ -34,108 +44,480 @@ fun AdminHubScreen(viewModel: AdminViewModel = viewModel(), onBack: () -> Unit) 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Gatekeeper Hub", fontWeight = FontWeight.Bold) },
+                title = {
+                    Text(
+                        text = "Admin Hub",
+                        fontWeight = FontWeight.Bold,
+                        color = ShahWhite
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = ShahWhite
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = DeepMidnightSlate,
-                    titleContentColor = Color.White,
-                    navigationIconContentColor = Color.White
+                    containerColor = ShahDarkGreen
                 )
             )
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { showCreateUserDialog = true },
-                icon = { Icon(Icons.Default.PersonAdd, contentDescription = null) },
-                text = { Text("Create User") },
-                containerColor = ElectricGold,
-                contentColor = Color.Black
-            )
+            if (selectedTab == 0) {
+                ExtendedFloatingActionButton(
+                    onClick = {
+                        showCreateUserDialog = true
+                    },
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Default.PersonAdd,
+                            contentDescription = null
+                        )
+                    },
+                    text = {
+                        Text("Add Employee")
+                    },
+                    containerColor = ShahGreen,
+                    contentColor = ShahWhite
+                )
+            }
         }
-    ) { padding ->
-        Column(modifier = Modifier.padding(padding).fillMaxSize().background(DeepMidnightSlate)) {
-            TabRow(
+    ) { paddingValues ->
+
+        Column(
+            modifier = Modifier
+                .padding(paddingValues)
+                .fillMaxSize()
+                .background(ShahGrey)
+        ) {
+
+            ScrollableTabRow(
                 selectedTabIndex = selectedTab,
-                containerColor = DeepMidnightSlate,
-                contentColor = ElectricGold,
+                containerColor = ShahWhite,
+                contentColor = ShahGreen,
+                edgePadding = 16.dp,
                 indicator = { tabPositions ->
-                    TabRowDefaults.SecondaryIndicator(
-                        Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
-                        color = ElectricGold
-                    )
+
+                    if (selectedTab < tabPositions.size) {
+                        TabRowDefaults.SecondaryIndicator(
+                            modifier = Modifier.tabIndicatorOffset(
+                                tabPositions[selectedTab]
+                            ),
+                            color = ShahGreen
+                        )
+                    }
                 }
             ) {
-                Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }, text = { Text("Logins") })
-                Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, text = { Text("Expenses") })
+
+                Tab(
+                    selected = selectedTab == 0,
+                    onClick = {
+                        selectedTab = 0
+                    },
+                    text = {
+                        Text(
+                            "Logins",
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                )
+
+                Tab(
+                    selected = selectedTab == 1,
+                    onClick = {
+                        selectedTab = 1
+                    },
+                    text = {
+                        Text(
+                            "Expenses",
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                )
+
+                Tab(
+                    selected = selectedTab == 2,
+                    onClick = {
+                        selectedTab = 2
+                    },
+                    text = {
+                        Text(
+                            "Attendance",
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                )
+
+                Tab(
+                    selected = selectedTab == 3,
+                    onClick = {
+                        selectedTab = 3
+                    },
+                    text = {
+                        Text(
+                            "Settings",
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                )
             }
 
-            if (selectedTab == 0) {
-                PendingLoginsList(viewModel)
-            } else {
-                PendingExpensesList(viewModel)
+            when (selectedTab) {
+
+                0 -> PendingLoginsList(viewModel)
+
+                1 -> PendingExpensesList(viewModel)
+
+                2 -> AdminAttendanceList(viewModel)
+
+                3 -> AdminSettingsList(
+                    onNavigateToCompanySettings = onNavigateToCompanySettings,
+                    onNavigateToBankDetails = onNavigateToBankDetails,
+                    onNavigateToTerms = onNavigateToTerms
+                )
             }
         }
     }
 
     if (showCreateUserDialog) {
-        CreateUserDialog(onDismiss = { showCreateUserDialog = false }, onCreate = { name, phone, pass, dept, role, access ->
-            viewModel.createUser(name, phone, pass, dept, role, access)
-            showCreateUserDialog = false
-        })
+
+        CreateUserDialog(
+            onDismiss = {
+                showCreateUserDialog = false
+            },
+            onCreate = { name, phone, pass, dept, role, access ->
+
+                viewModel.createUser(
+                    name,
+                    phone,
+                    pass,
+                    dept,
+                    role,
+                    access
+                )
+
+                showCreateUserDialog = false
+            }
+        )
     }
 
-    GlobalAsyncLoader(isLoading = viewModel.isLoading)
+    GlobalAsyncLoader(
+        isLoading = viewModel.isLoading
+    )
 }
 
+
+/* ============================================================
+   PENDING LOGIN REQUESTS
+   ============================================================ */
+
+@OptIn(
+    ExperimentalLayoutApi::class,
+    ExperimentalMaterial3Api::class
+)
 @Composable
-fun PendingLoginsList(viewModel: AdminViewModel) {
-    if (viewModel.pendingUsers.isEmpty() && !viewModel.isLoading) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("No pending login requests", color = Color.Gray)
+fun PendingLoginsList(
+    viewModel: AdminViewModel
+) {
+
+    if (
+        viewModel.pendingUsers.isEmpty() &&
+        !viewModel.isLoading
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "No pending login requests",
+                color = ShahMediumGrey
+            )
         }
+
+        return
     }
 
-    LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        items(viewModel.pendingUsers) { user ->
-            GlassCard(modifier = Modifier.padding(vertical = 8.dp).fillMaxWidth()) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(user.name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                        Text(user.phone, color = Color.Gray, fontSize = 12.sp)
-                        Text("Dept: ${user.dept}", color = ElectricGold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp)
+    ) {
+
+        items(
+            items = viewModel.pendingUsers,
+            key = { it.phone }
+        ) { user ->
+
+            Card(
+                modifier = Modifier
+                    .padding(vertical = 8.dp)
+                    .fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = ShahWhite
+                ),
+                elevation = CardDefaults.cardElevation(
+                    defaultElevation = 2.dp
+                )
+            ) {
+
+                Column(
+                    modifier = Modifier.padding(16.dp)
+                ) {
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+
+                        Column(
+                            modifier = Modifier.weight(1f)
+                        ) {
+
+                            Text(
+                                text = user.name,
+                                color = ShahBlack,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 18.sp
+                            )
+
+                            Text(
+                                text = user.phone,
+                                color = ShahMediumGrey,
+                                fontSize = 12.sp
+                            )
+
+                            Text(
+                                text = "Dept: ${user.dept}",
+                                color = ShahGreen,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        IconButton(
+                            onClick = {
+                                // Reject user can be added in AdminViewModel
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Reject",
+                                tint = ErrorRed
+                            )
+                        }
+
+                        IconButton(
+                            onClick = {
+                                viewModel.approveUser(
+                                    user.phone,
+                                    user.access
+                                )
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = "Approve",
+                                tint = SuccessGreen
+                            )
+                        }
                     }
-                    IconButton(onClick = { /* viewModel.rejectUser(user.phone) */ }) {
-                        Icon(Icons.Default.Close, contentDescription = "Reject", tint = Color.Red)
-                    }
-                    IconButton(onClick = { viewModel.approveUser(user.phone, user.access) }) {
-                        Icon(Icons.Default.Check, contentDescription = "Approve", tint = Color.Green)
+
+                    Spacer(
+                        modifier = Modifier.height(12.dp)
+                    )
+
+                    Text(
+                        text = "Module Access Permissions",
+                        color = ShahMediumGrey,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    val modules = listOf(
+                        "ATTENDANCE",
+                        "TASKS",
+                        "CALCULATOR",
+                        "DSR",
+                        "CLIENTS",
+                        "CHAT",
+                        "BILLING",
+                        "EQUIPMENT",
+                        "EXPENSE"
+                    )
+
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+
+                        modules.forEach { module ->
+
+                            val selected =
+                                user.access
+                                    .split(",")
+                                    .map { it.trim() }
+                                    .contains(module)
+
+                            FilterChip(
+                                selected = selected,
+
+                                onClick = {
+                                    val current =
+                                        user.access
+                                            .split(",")
+                                            .map { it.trim() }
+                                            .filter { it.isNotEmpty() }
+                                            .toMutableSet()
+
+                                    if (selected) {
+                                        current.remove(module)
+                                    } else {
+                                        current.add(module)
+                                    }
+
+                                    /*
+                                     * Access value is displayed locally.
+                                     * Actual persistence should be handled
+                                     * by AdminViewModel/backend.
+                                     */
+                                },
+
+                                label = {
+                                    Text(
+                                        text = module,
+                                        fontSize = 9.sp
+                                    )
+                                },
+
+                                modifier = Modifier.padding(
+                                    end = 4.dp
+                                ),
+
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = ShahGreen,
+                                    selectedLabelColor = ShahWhite
+                                )
+                            )
+                        }
                     }
                 }
-                
-                Spacer(modifier = Modifier.height(12.dp))
-                Text("Module Access Permissions", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                val modules = listOf("ATTENDANCE", "TASKS", "CALCULATOR", "DSR", "CLIENTS", "CHAT", "BILLING", "EQUIPMENT", "EXPENSE")
-                FlowRow(modifier = Modifier.fillMaxWidth()) {
-                    modules.forEach { module ->
-                        var checked by remember { mutableStateOf(user.access.contains(module)) }
-                        FilterChip(
-                            selected = checked,
-                            onClick = { 
-                                checked = !checked
-                                val list = user.access.split(",").toMutableList()
-                                if (checked) list.add(module) else list.remove(module)
-                                user.access = list.filter { it.isNotEmpty() }.joinToString(",")
-                            },
-                            label = { Text(module, fontSize = 9.sp) },
-                            modifier = Modifier.padding(end = 4.dp),
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = ElectricGold,
-                                selectedLabelColor = Color.Black
+            }
+        }
+    }
+}
+
+
+/* ============================================================
+   PENDING EXPENSES
+   ============================================================ */
+
+@Composable
+fun PendingExpensesList(
+    viewModel: AdminViewModel
+) {
+
+    if (
+        viewModel.pendingExpenses.isEmpty() &&
+        !viewModel.isLoading
+    ) {
+
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "No pending expense claims",
+                color = ShahMediumGrey
+            )
+        }
+
+        return
+    }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp)
+    ) {
+
+        items(viewModel.pendingExpenses) { expense ->
+
+            Card(
+                modifier = Modifier
+                    .padding(vertical = 8.dp)
+                    .fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = ShahWhite
+                ),
+                elevation = CardDefaults.cardElevation(
+                    defaultElevation = 2.dp
+                )
+            ) {
+
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+
+                    Column(
+                        modifier = Modifier.weight(1f)
+                    ) {
+
+                        Text(
+                            text = expense.employee,
+                            fontWeight = FontWeight.Bold,
+                            color = ShahBlack
+                        )
+
+                        Text(
+                            text = expense.category,
+                            color = ShahGreen,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+
+                        Text(
+                            text = expense.remarks,
+                            color = ShahMediumGrey,
+                            fontSize = 11.sp
+                        )
+
+                        Text(
+                            text = expense.amount,
+                            color = ShahBlack,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 16.sp
+                        )
+                    }
+
+                    IconButton(
+                        onClick = {
+                            viewModel.approveExpense(
+                                expense.id,
+                                "REJECTED"
                             )
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Cancel,
+                            contentDescription = "Reject",
+                            tint = ErrorRed
+                        )
+                    }
+
+                    IconButton(
+                        onClick = {
+                            viewModel.approveExpense(
+                                expense.id,
+                                "APPROVED"
+                            )
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = "Approve",
+                            tint = SuccessGreen
                         )
                     }
                 }
@@ -144,45 +526,476 @@ fun PendingLoginsList(viewModel: AdminViewModel) {
     }
 }
 
-@Composable
-fun PendingExpensesList(viewModel: AdminViewModel) {
-    if (viewModel.pendingExpenses.isEmpty() && !viewModel.isLoading) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("No pending expense claims", color = Color.Gray)
-        }
-    }
-    // Similar implementation for expenses
-}
+
+/* ============================================================
+   ATTENDANCE
+   ============================================================ */
 
 @Composable
-fun CreateUserDialog(onDismiss: () -> Unit, onCreate: (String, String, String, String, String, String) -> Unit) {
-    var name by remember { mutableStateOf("") }
-    var phone by remember { mutableStateOf("") }
-    var pass by remember { mutableStateOf("") }
-    var dept by remember { mutableStateOf("SURVEY") }
-    var role by remember { mutableStateOf("STAFF") }
-    var access by remember { mutableStateOf("ATTENDANCE,TASKS") }
+fun AdminAttendanceList(
+    viewModel: AdminViewModel
+) {
+
+    Column(
+        modifier = Modifier.fillMaxSize()
+    ) {
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+
+            StatItem(
+                label = "Present",
+                value = viewModel.presentCount.toString(),
+                color = SuccessGreen,
+                modifier = Modifier.weight(1f)
+            )
+
+            StatItem(
+                label = "Absent",
+                value = viewModel.absentCount.toString(),
+                color = ErrorRed,
+                modifier = Modifier.weight(1f)
+            )
+
+            StatItem(
+                label = "Leave",
+                value = viewModel.leaveCount.toString(),
+                color = WarningAmber,
+                modifier = Modifier.weight(1f)
+            )
+
+            StatItem(
+                label = "Pending",
+                value = viewModel.notPunchedCount.toString(),
+                color = ShahMediumGrey,
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        HorizontalDivider(
+            color = ShahLightGrey
+        )
+
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp)
+        ) {
+
+            items(viewModel.attendanceRecords) { record ->
+
+                Card(
+                    modifier = Modifier
+                        .padding(vertical = 4.dp)
+                        .fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = ShahWhite
+                    )
+                ) {
+
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+
+                        Column(
+                            modifier = Modifier.weight(1f)
+                        ) {
+
+                            Text(
+                                text = record.name,
+                                fontWeight = FontWeight.Bold
+                            )
+
+                            Text(
+                                text = record.location,
+                                fontSize = 11.sp,
+                                color = ShahMediumGrey
+                            )
+                        }
+
+                        Column(
+                            horizontalAlignment = Alignment.End
+                        ) {
+
+                            val statusColor =
+                                when (record.status) {
+
+                                    "PRESENT" ->
+                                        SuccessGreen
+
+                                    "LEAVE" ->
+                                        WarningAmber
+
+                                    else ->
+                                        ErrorRed
+                                }
+
+                            Text(
+                                text = record.status,
+                                color = statusColor,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp
+                            )
+
+                            Text(
+                                text = "IN: ${record.inTime}",
+                                fontSize = 10.sp,
+                                color = ShahMediumGrey
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+/* ============================================================
+   STAT ITEM
+   ============================================================ */
+
+@Composable
+fun StatItem(
+    label: String,
+    value: String,
+    color: Color,
+    modifier: Modifier
+) {
+
+    Surface(
+        modifier = modifier,
+        color = color.copy(alpha = 0.1f),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+
+        Column(
+            modifier = Modifier.padding(8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+
+            Text(
+                text = label,
+                fontSize = 10.sp,
+                color = color,
+                fontWeight = FontWeight.Bold
+            )
+
+            Text(
+                text = value,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = ShahBlack
+            )
+        }
+    }
+}
+
+
+/* ============================================================
+   ADMIN SETTINGS
+   ============================================================ */
+
+@Composable
+fun AdminSettingsList(
+    onNavigateToCompanySettings: () -> Unit,
+    onNavigateToBankDetails: () -> Unit,
+    onNavigateToTerms: () -> Unit
+) {
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp)
+    ) {
+
+        item {
+
+            AdminSettingItem(
+                title = "Company Profile",
+                subtitle = "Logo, Address, Contact Info",
+                icon = Icons.Default.Business,
+                onClick = onNavigateToCompanySettings
+            )
+
+            AdminSettingItem(
+                title = "Bank Details",
+                subtitle = "Account No, IFSC, GSTIN",
+                icon = Icons.Default.AccountBalance,
+                onClick = onNavigateToBankDetails
+            )
+
+            AdminSettingItem(
+                title = "Terms & Conditions",
+                subtitle = "Reusable document terms",
+                icon = Icons.Default.Gavel,
+                onClick = onNavigateToTerms
+            )
+
+            AdminSettingItem(
+                title = "Document Numbering",
+                subtitle = "Prefixes and sequences",
+                icon = Icons.Default.Numbers,
+                onClick = {
+                    // Future implementation
+                }
+            )
+
+            AdminSettingItem(
+                title = "Geo-Fence Settings",
+                subtitle = "Radius and allowed sites",
+                icon = Icons.Default.Map,
+                onClick = {
+                    // Future implementation
+                }
+            )
+        }
+    }
+}
+
+
+/* ============================================================
+   ADMIN SETTING ITEM
+   ============================================================ */
+
+@Composable
+fun AdminSettingItem(
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit
+) {
+
+    Card(
+        modifier = Modifier
+            .padding(vertical = 6.dp)
+            .fillMaxWidth()
+            .clickable {
+                onClick()
+            },
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = ShahWhite
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 1.dp
+        )
+    ) {
+
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = ShahGreen,
+                modifier = Modifier.size(24.dp)
+            )
+
+            Spacer(
+                modifier = Modifier.width(16.dp)
+            )
+
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+
+                Text(
+                    text = title,
+                    color = ShahBlack,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
+
+                Text(
+                    text = subtitle,
+                    color = ShahMediumGrey,
+                    fontSize = 12.sp
+                )
+            }
+
+            Icon(
+                imageVector = Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = ShahLightGrey
+            )
+        }
+    }
+}
+
+
+/* ============================================================
+   CREATE USER DIALOG
+   ============================================================ */
+
+@Composable
+fun CreateUserDialog(
+    onDismiss: () -> Unit,
+    onCreate: (
+        String,
+        String,
+        String,
+        String,
+        String,
+        String
+    ) -> Unit
+) {
+
+    var name by remember {
+        mutableStateOf("")
+    }
+
+    var phone by remember {
+        mutableStateOf("")
+    }
+
+    var password by remember {
+        mutableStateOf("")
+    }
+
+    var department by remember {
+        mutableStateOf("SURVEY")
+    }
+
+    var role by remember {
+        mutableStateOf("STAFF")
+    }
+
+    var access by remember {
+        mutableStateOf("ATTENDANCE,TASKS")
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Create New User") },
+
+        title = {
+            Text("Add New Employee")
+        },
+
         text = {
+
             Column {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Full Name") })
-                OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text("Mobile/Phone") })
-                OutlinedTextField(value = pass, onValueChange = { pass = it }, label = { Text("Password") })
-                // Simple TextFields for now, can be Dropdowns
-                OutlinedTextField(value = dept, onValueChange = { dept = it }, label = { Text("Department") })
-                OutlinedTextField(value = role, onValueChange = { role = it }, label = { Text("Role (ADMIN/STAFF)") })
+
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = {
+                        name = it
+                    },
+                    label = {
+                        Text("Full Name")
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(
+                    modifier = Modifier.height(8.dp)
+                )
+
+                OutlinedTextField(
+                    value = phone,
+                    onValueChange = {
+                        phone = it
+                    },
+                    label = {
+                        Text("Mobile/Phone")
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(
+                    modifier = Modifier.height(8.dp)
+                )
+
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = {
+                        password = it
+                    },
+                    label = {
+                        Text("Password")
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(
+                    modifier = Modifier.height(8.dp)
+                )
+
+                OutlinedTextField(
+                    value = department,
+                    onValueChange = {
+                        department = it
+                    },
+                    label = {
+                        Text("Department")
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(
+                    modifier = Modifier.height(8.dp)
+                )
+
+                OutlinedTextField(
+                    value = role,
+                    onValueChange = {
+                        role = it
+                    },
+                    label = {
+                        Text("Role (ADMIN/STAFF)")
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         },
+
         confirmButton = {
-            Button(onClick = { onCreate(name, phone, pass, dept, role, access) }) {
-                Text("CREATE")
+
+            Button(
+                onClick = {
+
+                    if (
+                        name.isNotBlank() &&
+                        phone.isNotBlank() &&
+                        password.isNotBlank()
+                    ) {
+
+                        onCreate(
+                            name.trim(),
+                            phone.trim(),
+                            password,
+                            department.trim(),
+                            role.trim().uppercase(),
+                            access
+                        )
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = ShahGreen
+                )
+            ) {
+
+                Text("ADD")
             }
         },
+
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("CANCEL") }
+
+            TextButton(
+                onClick = onDismiss
+            ) {
+
+                Text(
+                    text = "CANCEL",
+                    color = ShahGreen
+                )
+            }
         }
     )
 }

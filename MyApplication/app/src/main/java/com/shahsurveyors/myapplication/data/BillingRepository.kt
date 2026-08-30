@@ -1,55 +1,224 @@
 package com.shahsurveyors.myapplication.data
 
-import com.shahsurveyors.myapplication.data.local.*
+import com.shahsurveyors.myapplication.data.local.AppDao
+import com.shahsurveyors.myapplication.data.local.BankDetails
+import com.shahsurveyors.myapplication.data.local.BillingDocumentEntity
+import com.shahsurveyors.myapplication.data.local.BillingItemEntity
+import com.shahsurveyors.myapplication.data.local.CompanyProfile
+import com.shahsurveyors.myapplication.data.local.DocNumberingConfig
+import com.shahsurveyors.myapplication.data.local.TermConditionEntity
 import com.shahsurveyors.myapplication.models.DocType
 import kotlinx.coroutines.flow.Flow
 
-class BillingRepository(private val dao: AppDao) {
+class BillingRepository(
+    private val dao: AppDao
+) {
 
-    // Company & Bank
-    val companyProfile: Flow<CompanyProfile?> = dao.getCompanyProfile()
-    val bankDetails: Flow<BankDetails?> = dao.getBankDetails()
+    // =====================================================
+    // COMPANY PROFILE
+    // =====================================================
 
-    suspend fun updateCompanyProfile(profile: CompanyProfile) = dao.updateCompanyProfile(profile)
-    suspend fun updateBankDetails(details: BankDetails) = dao.updateBankDetails(details)
+    val companyProfile: Flow<CompanyProfile?> =
+        dao.getCompanyProfile()
 
-    // Documents
-    val allDocuments: Flow<List<BillingDocumentEntity>> = dao.getAllDocuments()
-    
-    suspend fun getDocumentById(id: Long) = dao.getDocumentById(id)
-    
-    suspend fun saveDocument(document: BillingDocumentEntity, items: List<BillingItemEntity>): Long {
-        val docId = dao.insertDocument(document)
-        val itemsWithId = items.map { it.copy(documentId = docId) }
-        dao.insertItems(itemsWithId)
-        return docId
+    suspend fun updateCompanyProfile(
+        profile: CompanyProfile
+    ) {
+        dao.updateCompanyProfile(profile)
     }
 
-    suspend fun updateDocument(document: BillingDocumentEntity, items: List<BillingItemEntity>) {
+
+    // =====================================================
+    // BANK DETAILS
+    // =====================================================
+
+    val bankDetails: Flow<BankDetails?> =
+        dao.getBankDetails()
+
+    suspend fun updateBankDetails(
+        details: BankDetails
+    ) {
+        dao.updateBankDetails(details)
+    }
+
+
+    // =====================================================
+    // BILLING DOCUMENTS
+    // =====================================================
+
+    val allDocuments: Flow<List<BillingDocumentEntity>> =
+        dao.getAllDocuments()
+
+    suspend fun getDocumentById(
+        id: Long
+    ): BillingDocumentEntity? {
+        return dao.getDocumentById(id)
+    }
+
+
+    // =====================================================
+    // SAVE DOCUMENT + ITEMS
+    // =====================================================
+
+    suspend fun saveDocument(
+        document: BillingDocumentEntity,
+        items: List<BillingItemEntity>
+    ): Long {
+
+        val documentId = dao.insertDocument(document)
+
+        if (items.isNotEmpty()) {
+
+            val itemsWithDocumentId =
+                items.mapIndexed { index, item ->
+
+                    item.copy(
+                        id = 0,
+                        documentId = documentId,
+                        orderIndex = index
+                    )
+                }
+
+            dao.insertItems(itemsWithDocumentId)
+        }
+
+        return documentId
+    }
+
+
+    // =====================================================
+    // UPDATE DOCUMENT + ITEMS
+    // =====================================================
+
+    suspend fun updateDocument(
+        document: BillingDocumentEntity,
+        items: List<BillingItemEntity>
+    ) {
+
         dao.updateDocument(document)
+
         dao.deleteItemsForDocument(document.id)
-        val itemsWithId = items.map { it.copy(documentId = document.id) }
-        dao.insertItems(itemsWithId)
+
+        if (items.isNotEmpty()) {
+
+            val itemsWithDocumentId =
+                items.mapIndexed { index, item ->
+
+                    item.copy(
+                        id = 0,
+                        documentId = document.id,
+                        orderIndex = index
+                    )
+                }
+
+            dao.insertItems(itemsWithDocumentId)
+        }
     }
 
-    suspend fun deleteDocument(document: BillingDocumentEntity) {
+
+    // =====================================================
+    // DELETE DOCUMENT
+    // =====================================================
+
+    suspend fun deleteDocument(
+        document: BillingDocumentEntity
+    ) {
+
         dao.deleteItemsForDocument(document.id)
+
         dao.deleteDocument(document)
     }
 
-    fun getItemsForDocument(documentId: Long): Flow<List<BillingItemEntity>> = dao.getItemsForDocument(documentId)
 
-    // Terms
-    val allTerms: Flow<List<TermConditionEntity>> = dao.getAllTerms()
-    suspend fun saveTerm(term: TermConditionEntity) = dao.insertTerm(term)
-    suspend fun deleteTerm(term: TermConditionEntity) = dao.deleteTerm(term)
+    // =====================================================
+    // DOCUMENT ITEMS
+    // =====================================================
 
-    // Numbering
-    suspend fun getNextDocNumber(docType: DocType): String {
-        val config = dao.getNumberingConfig(docType) ?: return "SSC/${docType.name.take(1)}/001"
-        // Simple generation logic, can be improved
-        return "${config.prefix}/${config.startingNumber}"
+    fun getItemsForDocument(
+        documentId: Long
+    ): Flow<List<BillingItemEntity>> {
+
+        return dao.getItemsForDocument(documentId)
     }
 
-    suspend fun updateNumberingConfig(config: DocNumberingConfig) = dao.updateNumberingConfig(config)
+
+    // =====================================================
+    // TERMS & CONDITIONS
+    // =====================================================
+
+    val allTerms: Flow<List<TermConditionEntity>> =
+        dao.getAllTerms()
+
+    suspend fun saveTerm(
+        term: TermConditionEntity
+    ) {
+
+        dao.insertTerm(term)
+    }
+
+    suspend fun deleteTerm(
+        term: TermConditionEntity
+    ) {
+
+        dao.deleteTerm(term)
+    }
+
+
+    // =====================================================
+    // DOCUMENT NUMBERING
+    // =====================================================
+
+    suspend fun getNextDocNumber(
+        docType: DocType
+    ): String {
+
+        val config =
+            dao.getNumberingConfig(docType)
+
+        if (config == null) {
+
+            return "SSC/${docType.name.take(1)}/001"
+        }
+
+        return buildDocumentNumber(config)
+    }
+
+
+    private fun buildDocumentNumber(
+        config: DocNumberingConfig
+    ): String {
+
+        val prefix =
+            config.prefix.trim()
+
+        val number =
+            config.startingNumber
+                .coerceAtLeast(1)
+                .toString()
+                .padStart(3, '0')
+
+        val financialYear =
+            config.financialYear.trim()
+
+        return if (financialYear.isBlank()) {
+
+            "$prefix/$number"
+
+        } else {
+
+            "$prefix/$financialYear/$number"
+        }
+    }
+
+
+    // =====================================================
+    // NUMBERING CONFIGURATION
+    // =====================================================
+
+    suspend fun updateNumberingConfig(
+        config: DocNumberingConfig
+    ) {
+
+        dao.updateNumberingConfig(config)
+    }
 }

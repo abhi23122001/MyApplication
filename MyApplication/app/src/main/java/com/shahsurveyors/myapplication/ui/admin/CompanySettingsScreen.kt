@@ -6,177 +6,508 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.shahsurveyors.myapplication.data.local.CompanyProfile
-import com.shahsurveyors.myapplication.ui.components.GlassCard
-import com.shahsurveyors.myapplication.ui.theme.DeepMidnightSlate
-import com.shahsurveyors.myapplication.ui.theme.ElectricGold
+import com.shahsurveyors.myapplication.ui.theme.ShahBlack
+import com.shahsurveyors.myapplication.ui.theme.ShahDarkGreen
+import com.shahsurveyors.myapplication.ui.theme.ShahGreen
+import com.shahsurveyors.myapplication.ui.theme.ShahGrey
+import com.shahsurveyors.myapplication.ui.theme.ShahMediumGrey
+import com.shahsurveyors.myapplication.ui.theme.ShahWhite
 import com.shahsurveyors.myapplication.utils.FileStorageHelper
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CompanySettingsScreen(viewModel: AdminViewModel, onBack: () -> Unit) {
+fun CompanySettingsScreen(
+    viewModel: AdminViewModel,
+    onBack: () -> Unit
+) {
     val context = LocalContext.current
+
     val profile by viewModel.companyProfile.collectAsState()
-    
+
     var name by remember { mutableStateOf("") }
     var address by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
     var footerText by remember { mutableStateOf("") }
+
     var logoUri by remember { mutableStateOf<String?>(null) }
     var sealUri by remember { mutableStateOf<String?>(null) }
     var signatureUri by remember { mutableStateOf<String?>(null) }
 
+    /*
+     * Load existing company profile
+     */
     LaunchedEffect(profile) {
-        profile?.let {
-            name = it.name
-            address = it.address
-            email = it.email
-            phone = it.phone
-            footerText = it.footerText
-            logoUri = it.logoUri
-            sealUri = it.sealUri
-            signatureUri = it.signatureUri
+        profile?.let { company ->
+
+            name = company.name
+            address = company.address
+            email = company.email
+            phone = company.phone
+            footerText = company.footerText
+
+            logoUri = company.logoUri
+            sealUri = company.sealUri
+            signatureUri = company.signatureUri
         }
     }
 
-    val logoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        uri?.let {
-            val path = FileStorageHelper.saveImageToInternalStorage(context, it, "company_logo.png")
-            logoUri = path
-        }
-    }
+    /*
+     * Company Logo Picker
+     */
+    val logoLauncher =
+        rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.GetContent()
+        ) { uri: Uri? ->
 
-    val sealLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        uri?.let {
-            val path = FileStorageHelper.saveImageToInternalStorage(context, it, "company_seal.png")
-            sealUri = path
-        }
-    }
+            uri?.let { selectedUri ->
 
-    val signLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        uri?.let {
-            val path = FileStorageHelper.saveImageToInternalStorage(context, it, "company_signature.png")
-            signatureUri = path
+                try {
+                    val savedPath =
+                        FileStorageHelper.saveImageToInternalStorage(
+                            context,
+                            selectedUri,
+                            "company_logo.png"
+                        )
+
+                    logoUri = savedPath
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
         }
-    }
+
+    /*
+     * Company Seal Picker
+     */
+    val sealLauncher =
+        rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.GetContent()
+        ) { uri: Uri? ->
+
+            uri?.let { selectedUri ->
+
+                try {
+                    val savedPath =
+                        FileStorageHelper.saveImageToInternalStorage(
+                            context,
+                            selectedUri,
+                            "company_seal.png"
+                        )
+
+                    sealUri = savedPath
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
+
+    /*
+     * Authorized Signature Picker
+     */
+    val signatureLauncher =
+        rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.GetContent()
+        ) { uri: Uri? ->
+
+            uri?.let { selectedUri ->
+
+                try {
+                    val savedPath =
+                        FileStorageHelper.saveImageToInternalStorage(
+                            context,
+                            selectedUri,
+                            "company_signature.png"
+                        )
+
+                    signatureUri = savedPath
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
 
     Scaffold(
         topBar = {
+
             TopAppBar(
-                title = { Text("Company Profile", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = null) }
+
+                title = {
+                    Text(
+                        text = "Company Profile",
+                        fontWeight = FontWeight.Bold,
+                        color = ShahWhite
+                    )
                 },
+
+                navigationIcon = {
+
+                    IconButton(
+                        onClick = onBack
+                    ) {
+
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = ShahWhite
+                        )
+                    }
+                },
+
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = DeepMidnightSlate,
-                    titleContentColor = Color.White,
-                    navigationIconContentColor = Color.White
+                    containerColor = ShahDarkGreen
                 )
             )
-        }
-    ) { padding ->
+        },
+
+        containerColor = ShahGrey
+
+    ) { paddingValues ->
+
         Column(
+
             modifier = Modifier
-                .padding(padding)
                 .fillMaxSize()
-                .background(DeepMidnightSlate)
+                .padding(paddingValues)
+                .background(ShahGrey)
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
+
         ) {
-            GlassCard(modifier = Modifier.fillMaxWidth()) {
-                Text("General Information", color = ElectricGold, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                SettingsTextField(value = name, onValueChange = { name = it }, label = "Company Name")
-                SettingsTextField(value = address, onValueChange = { address = it }, label = "Address")
-                SettingsTextField(value = email, onValueChange = { email = it }, label = "Email")
-                SettingsTextField(value = phone, onValueChange = { phone = it }, label = "Phone")
-                SettingsTextField(value = footerText, onValueChange = { footerText = it }, label = "Footer Text")
-            }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            ImageUploadCard("Company Logo", logoUri) { logoLauncher.launch("image/*") }
-            Spacer(modifier = Modifier.height(12.dp))
-            ImageUploadCard("Company Seal / Stamp", sealUri) { sealLauncher.launch("image/*") }
-            Spacer(modifier = Modifier.height(12.dp))
-            ImageUploadCard("Authorized Signature", signatureUri) { signLauncher.launch("image/*") }
-            
-            Spacer(modifier = Modifier.height(24.dp))
-            
-            Button(
-                onClick = {
-                    val updatedProfile = CompanyProfile(
-                        name = name,
-                        address = address,
-                        email = email,
-                        phone = phone,
-                        footerText = footerText,
-                        logoUri = logoUri,
-                        sealUri = sealUri,
-                        signatureUri = signatureUri
+
+            /*
+             * GENERAL INFORMATION
+             */
+
+            Card(
+
+                modifier = Modifier.fillMaxWidth(),
+
+                shape = RoundedCornerShape(12.dp),
+
+                colors = CardDefaults.cardColors(
+                    containerColor = ShahWhite
+                ),
+
+                elevation = CardDefaults.cardElevation(
+                    defaultElevation = 2.dp
+                )
+
+            ) {
+
+                Column(
+                    modifier = Modifier.padding(16.dp)
+                ) {
+
+                    Text(
+                        text = "General Information",
+                        color = ShahGreen,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleSmall
                     )
-                    viewModel.updateCompanyProfile(updatedProfile)
+
+                    Spacer(
+                        modifier = Modifier.height(16.dp)
+                    )
+
+                    SettingsTextField(
+                        value = name,
+                        onValueChange = {
+                            name = it
+                        },
+                        label = "Company Name"
+                    )
+
+                    SettingsTextField(
+                        value = address,
+                        onValueChange = {
+                            address = it
+                        },
+                        label = "Address"
+                    )
+
+                    SettingsTextField(
+                        value = email,
+                        onValueChange = {
+                            email = it
+                        },
+                        label = "Email"
+                    )
+
+                    SettingsTextField(
+                        value = phone,
+                        onValueChange = {
+                            phone = it
+                        },
+                        label = "Phone"
+                    )
+
+                    SettingsTextField(
+                        value = footerText,
+                        onValueChange = {
+                            footerText = it
+                        },
+                        label = "Footer Text"
+                    )
+                }
+            }
+
+            Spacer(
+                modifier = Modifier.height(16.dp)
+            )
+
+            /*
+             * COMPANY LOGO
+             */
+
+            ImageUploadCard(
+                label = "Company Logo",
+                uri = logoUri,
+                onUpload = {
+                    logoLauncher.launch("image/*")
+                }
+            )
+
+            Spacer(
+                modifier = Modifier.height(12.dp)
+            )
+
+            /*
+             * COMPANY SEAL
+             */
+
+            ImageUploadCard(
+                label = "Company Seal / Stamp",
+                uri = sealUri,
+                onUpload = {
+                    sealLauncher.launch("image/*")
+                }
+            )
+
+            Spacer(
+                modifier = Modifier.height(12.dp)
+            )
+
+            /*
+             * AUTHORIZED SIGNATURE
+             */
+
+            ImageUploadCard(
+                label = "Authorized Signature",
+                uri = signatureUri,
+                onUpload = {
+                    signatureLauncher.launch("image/*")
+                }
+            )
+
+            Spacer(
+                modifier = Modifier.height(24.dp)
+            )
+
+            /*
+             * SAVE BUTTON
+             */
+
+            Button(
+
+                onClick = {
+
+                    val updatedProfile = CompanyProfile(
+
+                        id = 1,
+
+                        name = name.trim(),
+
+                        address = address.trim(),
+
+                        email = email.trim(),
+
+                        phone = phone.trim(),
+
+                        logoUri = logoUri,
+
+                        sealUri = sealUri,
+
+                        signatureUri = signatureUri,
+
+                        footerText = footerText.trim()
+                    )
+
+                    viewModel.updateCompanyProfile(
+                        updatedProfile
+                    )
+
                     onBack()
                 },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = ElectricGold, contentColor = Color.Black)
+
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+
+                shape = RoundedCornerShape(12.dp),
+
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = ShahGreen,
+                    contentColor = ShahWhite
+                )
+
             ) {
-                Text("SAVE PROFILE", fontWeight = FontWeight.Bold)
-            }
-        }
-    }
-}
 
-@Composable
-fun SettingsTextField(value: String, onValueChange: (String) -> Unit, label: String) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        label = { Text(label) },
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedTextColor = Color.White,
-            unfocusedTextColor = Color.White,
-            focusedBorderColor = ElectricGold,
-            unfocusedBorderColor = Color.Gray
-        )
-    )
-}
-
-@Composable
-fun ImageUploadCard(label: String, uri: String?, onUpload: () -> Unit) {
-    GlassCard(modifier = Modifier.fillMaxWidth()) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(label, color = Color.White, fontWeight = FontWeight.Bold)
-                Text(if (uri != null) "Image uploaded" else "No image selected", color = Color.Gray, fontSize = 12.sp)
-            }
-            if (uri != null) {
-                AsyncImage(
-                    model = uri,
-                    contentDescription = null,
-                    modifier = Modifier.size(60.dp).padding(4.dp)
+                Text(
+                    text = "SAVE PROFILE",
+                    fontWeight = FontWeight.Bold
                 )
             }
-            IconButton(onClick = onUpload) {
-                Icon(Icons.Default.CloudUpload, contentDescription = null, tint = ElectricGold)
+
+            Spacer(
+                modifier = Modifier.height(16.dp)
+            )
+        }
+    }
+}
+
+
+/*
+ * IMAGE UPLOAD CARD
+ */
+
+@Composable
+fun ImageUploadCard(
+    label: String,
+    uri: String?,
+    onUpload: () -> Unit
+) {
+
+    Card(
+
+        modifier = Modifier.fillMaxWidth(),
+
+        shape = RoundedCornerShape(12.dp),
+
+        colors = CardDefaults.cardColors(
+            containerColor = ShahWhite
+        ),
+
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 1.dp
+        )
+
+    ) {
+
+        Row(
+
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+
+            verticalAlignment = Alignment.CenterVertically
+
+        ) {
+
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+
+                Text(
+                    text = label,
+                    color = ShahBlack,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(
+                    modifier = Modifier.height(4.dp)
+                )
+
+                Text(
+                    text = if (uri != null) {
+                        "Image uploaded"
+                    } else {
+                        "No image selected"
+                    },
+                    color = ShahMediumGrey,
+                    fontSize = 12.sp
+                )
+            }
+
+            /*
+             * Preview image
+             */
+
+            if (!uri.isNullOrBlank()) {
+
+                AsyncImage(
+
+                    model = uri,
+
+                    contentDescription = label,
+
+                    modifier = Modifier
+                        .size(60.dp)
+                        .padding(4.dp)
+                )
+            }
+
+            /*
+             * Upload button
+             */
+
+            IconButton(
+                onClick = onUpload
+            ) {
+
+                Icon(
+                    imageVector = Icons.Default.CloudUpload,
+                    contentDescription = "Upload $label",
+                    tint = ShahGreen
+                )
             }
         }
     }
+}
+
+
+/*
+ * COMMON SETTINGS TEXT FIELD
+ */
+
+@Composable
+fun SettingsTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String
+) {
+
+    OutlinedTextField(
+
+        value = value,
+
+        onValueChange = onValueChange,
+
+        label = {
+            Text(label)
+        },
+
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+
+        shape = RoundedCornerShape(12.dp),
+
+        singleLine = false
+    )
 }

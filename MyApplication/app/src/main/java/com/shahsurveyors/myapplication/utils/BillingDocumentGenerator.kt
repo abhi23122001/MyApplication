@@ -1,175 +1,843 @@
 package com.shahsurveyors.myapplication.utils
 
 import android.content.Context
-import android.graphics.*
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
-import com.shahsurveyors.myapplication.R
-import com.shahsurveyors.myapplication.models.BillingDocument
+import com.shahsurveyors.myapplication.data.local.BankDetails
+import com.shahsurveyors.myapplication.data.local.BillingItemEntity
+import com.shahsurveyors.myapplication.data.local.CompanyProfile
 import com.shahsurveyors.myapplication.models.DocType
 import java.io.File
 import java.io.FileOutputStream
-import java.util.*
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 object BillingDocumentGenerator {
 
-    fun generatePdf(context: Context, document: BillingDocument): File {
+    data class DocumentData(
+        val company: CompanyProfile,
+        val bank: BankDetails,
+        val clientName: String,
+        val clientAddress: String,
+        val clientGstin: String?,
+        val docType: DocType,
+        val docNumber: String,
+        val date: Long = System.currentTimeMillis(),
+        val gstType: String,
+        val gstPercentage: Double = 18.0,
+        val items: List<BillingItemEntity>,
+        val terms: List<String>
+    )
+
+    fun generatePdf(
+        context: Context,
+        data: DocumentData
+    ): File {
+
         val pdfDocument = PdfDocument()
-        val pageInfo = PdfDocument.PageInfo.Builder(595, 842, 1).create() // A4 size
+
+        val pageInfo = PdfDocument.PageInfo.Builder(
+            595,
+            842,
+            1
+        ).create()
+
         val page = pdfDocument.startPage(pageInfo)
         val canvas = page.canvas
-        val paint = Paint()
 
-        var currentY = 40f
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
 
-        // 1. Header
-        drawHeader(canvas, paint, document.docType)
-        currentY = 150f
-
-        // 2. Company Details
-        drawCompanyDetails(canvas, paint)
-        
-        // 3. Client Details
-        drawClientDetails(canvas, paint, document)
-        currentY = 300f
-
-        // 4. Table Header
-        drawTableHeader(canvas, paint, currentY)
-        currentY += 25f
-
-        // 5. Items
-        var subTotal = 0.0
-        document.items.forEachIndexed { index, item ->
-            drawItemRow(canvas, paint, index + 1, item, currentY)
-            subTotal += item.taxableAmount
-            currentY += 20f
+        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.BLACK
+            textSize = 10f
+            typeface = Typeface.DEFAULT
         }
 
-        currentY += 10f
+        // ------------------------------------------------------------
+        // HEADER
+        // ------------------------------------------------------------
 
-        // 6. Tax Calculations
-        val taxAmount = if (document.docType == DocType.TAX_INVOICE) {
-            drawTaxCalculations(canvas, paint, subTotal, document.isInterState, currentY)
-        } else {
-            0.0
+        drawHeader(
+            canvas = canvas,
+            company = data.company
+        )
+
+        // ------------------------------------------------------------
+        // DOCUMENT TITLE
+        // ------------------------------------------------------------
+
+        paint.color = Color.BLACK
+        paint.textSize = 14f
+        paint.typeface = Typeface.create(
+            Typeface.DEFAULT,
+            Typeface.BOLD
+        )
+        paint.textAlign = Paint.Align.CENTER
+
+        val title = when (data.docType) {
+            DocType.TAX_INVOICE -> "TAX INVOICE"
+            DocType.NON_GST_BILL -> "BILL"
+            DocType.QUOTATION -> "QUOTATION"
         }
-        
-        val grandTotal = subTotal + taxAmount
 
-        // 7. Total in Words
-        drawTotalInWords(canvas, paint, grandTotal, 650f)
+        canvas.drawText(
+            title,
+            297f,
+            160f,
+            paint
+        )
 
-        // 8. Bank Details & Terms
-        drawBankDetails(canvas, paint, 700f)
-        
-        // 9. Stamp
-        drawStamp(context, canvas, paint, 450f, 700f)
+        paint.textAlign = Paint.Align.LEFT
+
+        // ------------------------------------------------------------
+        // DATE & DOCUMENT NUMBER
+        // ------------------------------------------------------------
+
+        val sdf = SimpleDateFormat(
+            "dd/MM/yyyy",
+            Locale.getDefault()
+        )
+
+        paint.textSize = 10f
+        paint.typeface = Typeface.DEFAULT
+
+        canvas.drawText(
+            "Date: ${sdf.format(Date(data.date))}",
+            430f,
+            185f,
+            paint
+        )
+
+        canvas.drawText(
+            "No: ${data.docNumber}",
+            430f,
+            200f,
+            paint
+        )
+
+        // ------------------------------------------------------------
+        // CLIENT DETAILS
+        // ------------------------------------------------------------
+
+        paint.typeface = Typeface.create(
+            Typeface.DEFAULT,
+            Typeface.BOLD
+        )
+
+        canvas.drawText(
+            "TO:",
+            40f,
+            185f,
+            paint
+        )
+
+        paint.typeface = Typeface.DEFAULT
+
+        canvas.drawText(
+            data.clientName,
+            40f,
+            200f,
+            paint
+        )
+
+        canvas.drawText(
+            data.clientAddress,
+            40f,
+            215f,
+            paint
+        )
+
+        data.clientGstin
+            ?.takeIf { it.isNotBlank() }
+            ?.let {
+                canvas.drawText(
+                    "GSTIN: $it",
+                    40f,
+                    230f,
+                    paint
+                )
+            }
+
+        // ------------------------------------------------------------
+        // QUOTATION INTRODUCTION
+        // ------------------------------------------------------------
+
+        if (data.docType == DocType.QUOTATION) {
+
+            canvas.drawText(
+                "Dear Sir,",
+                40f,
+                260f,
+                paint
+            )
+
+            canvas.drawText(
+                "We thank you for the enquiry and are pleased to offer our prices for your kind consideration.",
+                40f,
+                275f,
+                paint
+            )
+        }
+
+        // ------------------------------------------------------------
+        // ITEMS TABLE
+        // ------------------------------------------------------------
+
+        val startY = 300f
+
+        drawTable(
+            canvas = canvas,
+            items = data.items,
+            startY = startY
+        )
+
+        // ------------------------------------------------------------
+        // TOTAL CALCULATION
+        // ------------------------------------------------------------
+
+        val tableBottom =
+            startY +
+                    25f +
+                    (data.items.size * 20f) +
+                    20f
+
+        val subTotal = data.items.sumOf {
+            it.amount
+        }
+
+        var total = subTotal
+
+        var calcY = tableBottom + 20f
+
+        if (data.docType != DocType.NON_GST_BILL) {
+
+            val gstRate = data.gstPercentage / 100.0
+
+            if (data.gstType == "IGST") {
+
+                val igst = subTotal * gstRate
+
+                canvas.drawText(
+                    "IGST (${data.gstPercentage}%):",
+                    380f,
+                    calcY,
+                    textPaint
+                )
+
+                canvas.drawText(
+                    formatCurrency(igst),
+                    480f,
+                    calcY,
+                    textPaint
+                )
+
+                total += igst
+
+                calcY += 15f
+
+            } else {
+
+                val cgst = subTotal * (gstRate / 2)
+                val sgst = subTotal * (gstRate / 2)
+
+                canvas.drawText(
+                    "CGST (${data.gstPercentage / 2}%):",
+                    380f,
+                    calcY,
+                    textPaint
+                )
+
+                canvas.drawText(
+                    formatCurrency(cgst),
+                    480f,
+                    calcY,
+                    textPaint
+                )
+
+                calcY += 15f
+
+                canvas.drawText(
+                    "SGST (${data.gstPercentage / 2}%):",
+                    380f,
+                    calcY,
+                    textPaint
+                )
+
+                canvas.drawText(
+                    formatCurrency(sgst),
+                    480f,
+                    calcY,
+                    textPaint
+                )
+
+                total += cgst + sgst
+
+                calcY += 15f
+            }
+        }
+
+        // ------------------------------------------------------------
+        // GRAND TOTAL
+        // ------------------------------------------------------------
+
+        paint.typeface = Typeface.create(
+            Typeface.DEFAULT,
+            Typeface.BOLD
+        )
+
+        canvas.drawText(
+            "GRAND TOTAL:",
+            380f,
+            calcY + 5f,
+            paint
+        )
+
+        canvas.drawText(
+            formatCurrency(total),
+            480f,
+            calcY + 5f,
+            paint
+        )
+
+        // ------------------------------------------------------------
+        // AMOUNT IN WORDS
+        // ------------------------------------------------------------
+
+        paint.typeface = Typeface.create(
+            Typeface.DEFAULT,
+            Typeface.ITALIC
+        )
+
+        canvas.drawText(
+            "Amount in words: ${NumberToWords.convert(total)}",
+            40f,
+            calcY + 25f,
+            paint
+        )
+
+        // ------------------------------------------------------------
+        // TERMS
+        // ------------------------------------------------------------
+
+        calcY += 60f
+
+        paint.typeface = Typeface.create(
+            Typeface.DEFAULT,
+            Typeface.BOLD
+        )
+
+        canvas.drawText(
+            "TERMS & CONDITIONS:",
+            40f,
+            calcY,
+            paint
+        )
+
+        paint.typeface = Typeface.DEFAULT
+
+        var termY = calcY + 15f
+
+        data.terms.forEachIndexed { index, term ->
+
+            canvas.drawText(
+                "${index + 1}. $term",
+                50f,
+                termY,
+                paint
+            )
+
+            termY += 15f
+        }
+
+        // ------------------------------------------------------------
+        // BANK DETAILS
+        // ------------------------------------------------------------
+
+        val bankY = 700f
+
+        paint.typeface = Typeface.create(
+            Typeface.DEFAULT,
+            Typeface.BOLD
+        )
+
+        canvas.drawText(
+            "BANK DETAILS:",
+            40f,
+            bankY,
+            paint
+        )
+
+        paint.typeface = Typeface.DEFAULT
+
+        canvas.drawText(
+            "Bank: ${data.bank.bankName}",
+            40f,
+            bankY + 15f,
+            paint
+        )
+
+        canvas.drawText(
+            "A/C No: ${data.bank.accountNumber}",
+            40f,
+            bankY + 30f,
+            paint
+        )
+
+        canvas.drawText(
+            "IFSC: ${data.bank.ifscCode} | Branch: ${data.bank.branchAddress}",
+            40f,
+            bankY + 45f,
+            paint
+        )
+
+        // ------------------------------------------------------------
+        // SEAL & SIGNATURE
+        // ------------------------------------------------------------
+
+        drawBranding(
+            canvas = canvas,
+            company = data.company
+        )
+
+        // ------------------------------------------------------------
+        // FOOTER
+        // ------------------------------------------------------------
+
+        paint.textAlign = Paint.Align.CENTER
+        paint.textSize = 8f
+        paint.typeface = Typeface.DEFAULT
+
+        canvas.drawText(
+            data.company.footerText,
+            297f,
+            830f,
+            paint
+        )
+
+        paint.textAlign = Paint.Align.LEFT
+
+        // ------------------------------------------------------------
+        // FINISH PDF
+        // ------------------------------------------------------------
 
         pdfDocument.finishPage(page)
 
-        val file = File(context.cacheDir, "${document.docType}_${System.currentTimeMillis()}.pdf")
-        pdfDocument.writeTo(FileOutputStream(file))
+        val fileName =
+            "SSC_${title.replace(" ", "_")}_${System.currentTimeMillis()}.pdf"
+
+        val file = File(
+            context.cacheDir,
+            fileName
+        )
+
+        FileOutputStream(file).use {
+            pdfDocument.writeTo(it)
+        }
+
         pdfDocument.close()
 
         return file
     }
 
-    private fun drawHeader(canvas: Canvas, paint: Paint, docType: DocType) {
+    // ================================================================
+    // HEADER
+    // ================================================================
+
+    private fun drawHeader(
+        canvas: Canvas,
+        company: CompanyProfile
+    ) {
+
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+
+        // Logo
+        company.logoUri?.let { path ->
+
+            try {
+
+                val bitmap = BitmapFactory.decodeFile(path)
+
+                if (bitmap != null) {
+
+                    val scaled = Bitmap.createScaledBitmap(
+                        bitmap,
+                        80,
+                        80,
+                        true
+                    )
+
+                    canvas.drawBitmap(
+                        scaled,
+                        40f,
+                        40f,
+                        paint
+                    )
+                }
+
+            } catch (_: Exception) {
+                // Ignore invalid logo
+            }
+        }
+
         paint.textAlign = Paint.Align.CENTER
-        paint.textSize = 18f
-        paint.isFakeBoldText = true
-        canvas.drawText(docType.name.replace("_", " "), 297f, 40f, paint)
-    }
+        paint.color = Color.BLACK
 
-    private fun drawCompanyDetails(canvas: Canvas, paint: Paint) {
+        paint.textSize = 20f
+        paint.typeface = Typeface.create(
+            Typeface.DEFAULT,
+            Typeface.BOLD
+        )
+
+        canvas.drawText(
+            company.name,
+            297f,
+            60f,
+            paint
+        )
+
+        paint.textSize = 9f
+        paint.typeface = Typeface.DEFAULT
+
+        canvas.drawText(
+            "ISO 9001:2015 CERTIFIED",
+            297f,
+            75f,
+            paint
+        )
+
+        canvas.drawText(
+            company.address,
+            297f,
+            90f,
+            paint
+        )
+
+        canvas.drawText(
+            "Email: ${company.email} | Mobile: ${company.phone}",
+            297f,
+            105f,
+            paint
+        )
+
+        paint.strokeWidth = 1f
+
+        canvas.drawLine(
+            40f,
+            120f,
+            555f,
+            120f,
+            paint
+        )
+
         paint.textAlign = Paint.Align.LEFT
-        paint.textSize = 14f
-        paint.isFakeBoldText = true
-        canvas.drawText("SHAH SURVEYORS AND CONSULTANCY", 40f, 80f, paint)
-        paint.textSize = 10f
-        paint.isFakeBoldText = false
-        canvas.drawText("(ISO 9001:2015 CERTIFIED)", 40f, 95f, paint)
-        canvas.drawText("GSTIN: 23JZEPS5792H1ZQ | PAN: JZEPS5792H | State Code: 23", 40f, 110f, paint)
-        canvas.drawText("Sai College Road Gahilgarh (East) Waidhan, Singrauli, M.P. 486886", 40f, 125f, paint)
-        canvas.drawText("shahsurveyors2022@gmail.com | Mob: +91 7974831659", 40f, 140f, paint)
     }
 
-    private fun drawClientDetails(canvas: Canvas, paint: Paint, doc: BillingDocument) {
-        paint.isFakeBoldText = true
-        canvas.drawText("BILL TO:", 40f, 180f, paint)
-        paint.isFakeBoldText = false
-        canvas.drawText(doc.clientName, 40f, 195f, paint)
-        canvas.drawText(doc.clientAddress, 40f, 210f, paint)
-        doc.clientGstin?.let { canvas.drawText("GSTIN: $it", 40f, 225f, paint) }
+    // ================================================================
+    // ITEMS TABLE
+    // ================================================================
+
+    private fun drawTable(
+        canvas: Canvas,
+        items: List<BillingItemEntity>,
+        startY: Float
+    ) {
+
+        val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 1f
+            color = Color.BLACK
+        }
+
+        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.BLACK
+            textSize = 9f
+            typeface = Typeface.DEFAULT
+        }
+
+        val tableHeight =
+            25f + (items.size * 20f)
+
+        // Outer border
+        canvas.drawRect(
+            40f,
+            startY,
+            555f,
+            startY + tableHeight,
+            borderPaint
+        )
+
+        // Header separator
+        canvas.drawLine(
+            40f,
+            startY + 25f,
+            555f,
+            startY + 25f,
+            borderPaint
+        )
+
+        // Vertical columns
+        canvas.drawLine(
+            80f,
+            startY,
+            80f,
+            startY + tableHeight,
+            borderPaint
+        )
+
+        canvas.drawLine(
+            350f,
+            startY,
+            350f,
+            startY + tableHeight,
+            borderPaint
+        )
+
+        canvas.drawLine(
+            400f,
+            startY,
+            400f,
+            startY + tableHeight,
+            borderPaint
+        )
+
+        canvas.drawLine(
+            440f,
+            startY,
+            440f,
+            startY + tableHeight,
+            borderPaint
+        )
+
+        canvas.drawLine(
+            490f,
+            startY,
+            490f,
+            startY + tableHeight,
+            borderPaint
+        )
+
+        // Header
+        textPaint.typeface = Typeface.create(
+            Typeface.DEFAULT,
+            Typeface.BOLD
+        )
+
+        canvas.drawText(
+            "S.No",
+            45f,
+            startY + 17f,
+            textPaint
+        )
+
+        canvas.drawText(
+            "Description",
+            85f,
+            startY + 17f,
+            textPaint
+        )
+
+        canvas.drawText(
+            "Unit",
+            355f,
+            startY + 17f,
+            textPaint
+        )
+
+        canvas.drawText(
+            "Qty",
+            405f,
+            startY + 17f,
+            textPaint
+        )
+
+        canvas.drawText(
+            "Rate",
+            445f,
+            startY + 17f,
+            textPaint
+        )
+
+        canvas.drawText(
+            "Amount",
+            495f,
+            startY + 17f,
+            textPaint
+        )
+
+        // Items
+        textPaint.typeface = Typeface.DEFAULT
+
+        var y = startY + 42f
+
+        items.forEachIndexed { index, item ->
+
+            canvas.drawText(
+                "${index + 1}",
+                50f,
+                y,
+                textPaint
+            )
+
+            canvas.drawText(
+                truncateText(item.description, 40),
+                85f,
+                y,
+                textPaint
+            )
+
+            canvas.drawText(
+                item.unit,
+                355f,
+                y,
+                textPaint
+            )
+
+            canvas.drawText(
+                formatNumber(item.qty),
+                405f,
+                y,
+                textPaint
+            )
+
+            canvas.drawText(
+                formatNumber(item.rate),
+                445f,
+                y,
+                textPaint
+            )
+
+            canvas.drawText(
+                formatNumber(item.amount),
+                495f,
+                y,
+                textPaint
+            )
+
+            y += 20f
+        }
     }
 
-    private fun drawTableHeader(canvas: Canvas, paint: Paint, y: Float) {
-        paint.isFakeBoldText = true
-        canvas.drawText("S.No", 40f, y, paint)
-        canvas.drawText("Work Description", 80f, y, paint)
-        canvas.drawText("Qty", 350f, y, paint)
-        canvas.drawText("Unit", 400f, y, paint)
-        canvas.drawText("Rate", 450f, y, paint)
-        canvas.drawText("Amount", 520f, y, paint)
-        canvas.drawLine(40f, y + 5, 555f, y + 5, paint)
+    // ================================================================
+    // SEAL + SIGNATURE
+    // ================================================================
+
+    private fun drawBranding(
+        canvas: Canvas,
+        company: CompanyProfile
+    ) {
+
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+
+        // Seal
+        company.sealUri?.let { path ->
+
+            try {
+
+                val bitmap = BitmapFactory.decodeFile(path)
+
+                if (bitmap != null) {
+
+                    val scaled = Bitmap.createScaledBitmap(
+                        bitmap,
+                        120,
+                        120,
+                        true
+                    )
+
+                    canvas.drawBitmap(
+                        scaled,
+                        400f,
+                        650f,
+                        paint
+                    )
+                }
+
+            } catch (_: Exception) {
+                // Ignore invalid seal
+            }
+        }
+
+        // Signature
+        company.signatureUri?.let { path ->
+
+            try {
+
+                val bitmap = BitmapFactory.decodeFile(path)
+
+                if (bitmap != null) {
+
+                    val scaled = Bitmap.createScaledBitmap(
+                        bitmap,
+                        100,
+                        50,
+                        true
+                    )
+
+                    canvas.drawBitmap(
+                        scaled,
+                        420f,
+                        750f,
+                        paint
+                    )
+                }
+
+            } catch (_: Exception) {
+                // Ignore invalid signature
+            }
+        }
+
+        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.BLACK
+            textSize = 10f
+        }
+
+        canvas.drawText(
+            "For ${company.name}",
+            380f,
+            795f,
+            textPaint
+        )
+
+        textPaint.typeface = Typeface.create(
+            Typeface.DEFAULT,
+            Typeface.BOLD
+        )
+
+        canvas.drawText(
+            "Authorized Signatory",
+            420f,
+            810f,
+            textPaint
+        )
     }
 
-    private fun drawItemRow(canvas: Canvas, paint: Paint, index: Int, item: com.shahsurveyors.myapplication.models.BillingItem, y: Float) {
-        paint.isFakeBoldText = false
-        canvas.drawText(index.toString(), 40f, y, paint)
-        canvas.drawText(item.description, 80f, y, paint)
-        canvas.drawText(item.qty.toString(), 350f, y, paint)
-        canvas.drawText(item.unit, 400f, y, paint)
-        canvas.drawText(String.format("%.2f", item.rate), 450f, y, paint)
-        canvas.drawText(String.format("%.2f", item.taxableAmount), 520f, y, paint)
+    // ================================================================
+    // HELPERS
+    // ================================================================
+
+    private fun formatCurrency(value: Double): String {
+        return "₹${String.format(Locale.US, "%.2f", value)}"
     }
 
-    private fun drawTaxCalculations(canvas: Canvas, paint: Paint, subTotal: Double, isInterState: Boolean, y: Float): Double {
-        var currentY = y
-        paint.textAlign = Paint.Align.RIGHT
-        if (isInterState) {
-            val igst = subTotal * 0.18
-            canvas.drawText("IGST (18%): ${String.format("%.2f", igst)}", 555f, currentY, paint)
-            return igst
+    private fun formatNumber(value: Double): String {
+        return String.format(Locale.US, "%.2f", value)
+    }
+
+    private fun truncateText(
+        text: String,
+        maxLength: Int
+    ): String {
+
+        return if (text.length <= maxLength) {
+            text
         } else {
-            val cgst = subTotal * 0.09
-            val sgst = subTotal * 0.09
-            canvas.drawText("CGST (9%): ${String.format("%.2f", cgst)}", 555f, currentY, paint)
-            canvas.drawText("SGST (9%): ${String.format("%.2f", sgst)}", 555f, currentY + 15, paint)
-            return cgst + sgst
+            text.take(maxLength - 3) + "..."
         }
-    }
-
-    private fun drawTotalInWords(canvas: Canvas, paint: Paint, total: Double, y: Float) {
-        paint.textAlign = Paint.Align.RIGHT
-        paint.isFakeBoldText = true
-        canvas.drawText("Grand Total: ${String.format("%.2f", total)}", 555f, y, paint)
-        paint.textAlign = Paint.Align.LEFT
-        paint.isFakeBoldText = false
-        canvas.drawText("Amount in words: ${convertAmountToWords(total)}", 40f, y + 20, paint)
-    }
-
-    private fun drawBankDetails(canvas: Canvas, paint: Paint, y: Float) {
-        paint.isFakeBoldText = true
-        canvas.drawText("Bank Details:", 40f, y, paint)
-        paint.isFakeBoldText = false
-        canvas.drawText("Bank: Union Bank of India", 40f, y + 15, paint)
-        canvas.drawText("A/C: 436701010250644", 40f, y + 30, paint)
-        canvas.drawText("IFSC: UBIN0543675", 40f, y + 45, paint)
-        canvas.drawText("Branch: Vindhyanagar Singrauli", 40f, y + 60, paint)
-    }
-
-    private fun drawStamp(context: Context, canvas: Canvas, paint: Paint, x: Float, y: Float) {
-        try {
-            val bitmap = BitmapFactory.decodeResource(context.resources, R.drawable.seal_sign)
-            val scaledBitmap = Bitmap.createScaledBitmap(bitmap, 80, 80, true)
-            canvas.drawBitmap(scaledBitmap, x, y, paint)
-            canvas.drawText("Authorized Signatory", x, y + 95, paint)
-        } catch (e: Exception) {
-            canvas.drawText("[Stamp Placeholder]", x, y + 40, paint)
-        }
-    }
-
-    private fun convertAmountToWords(amount: Double): String {
-        return "RUPEES ${amount.toLong()} ONLY"
     }
 }

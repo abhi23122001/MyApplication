@@ -7,6 +7,25 @@
   "client": [
     {
       "client_info": {
+        "mobilesdk_app_id": "1:1019384802288:android:1095f8add3df07bbea0b35",
+        "android_client_info": {
+          "package_name": "com.shahsurveyors.myapplication"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDTFvXn8wRXta2IkktqGBuv4Vv7j6XO0SY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:1019384802288:android:bf612a2dc8482d33ea0b35",
         "android_client_info": {
           "package_name": "com.ssc"
