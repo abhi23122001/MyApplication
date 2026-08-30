@@ -1,0 +1,216 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ----------------------------------------------------
+    // HELPER FUNCTIONS
+    // ----------------------------------------------------
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function myUid() {
+      return request.auth.uid;
+    }
+
+    function userExists() {
+      return signedIn() && exists(/databases/$(database)/documents/users/$(myUid()));
+    }
+
+    function myUser() {
+      return userExists() ? get(/databases/$(database)/documents/users/$(myUid())).data : {};
+    }
+
+    function isActive() {
+      return signedIn() && (
+        !userExists() ||
+        myUser().get('active', true) == true
+      );
+    }
+
+    function isAdmin() {
+      return signedIn() && (
+        myUser().get('role', '').matches('(?i)^ADMIN$') ||
+        myUser().get('access', '').matches('(?i)(^|,)\\s*ALL\\s*(,|$)') ||
+        request.auth.token.get('admin', false) == true
+      );
+    }
+
+    function isOwner(data) {
+      return data.get('uid', '') == myUid() ||
+             data.get('userUid', '') == myUid() ||
+             data.get('employeeUid', '') == myUid() ||
+             data.get('employeeId', '') == myUid() ||
+             data.get('senderUid', '') == myUid() ||
+             data.get('assignedToUid', '') == myUid() ||
+             data.get('targetUid', '') == myUid() ||
+             data.get('targetUid', '') == '' ||
+             data.get('actorUid', '') == myUid();
+    }
+
+    // ----------------------------------------------------
+    // USERS COLLECTION
+    // ----------------------------------------------------
+    match /users/{uid} {
+      allow read: if signedIn();
+      allow create: if signedIn();
+      allow update: if signedIn() && (uid == myUid() || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    // ----------------------------------------------------
+    // ATTENDANCE
+    // ----------------------------------------------------
+    match /attendance/{id} {
+      allow read: if signedIn();
+      allow create: if signedIn();
+      allow update: if signedIn() && (isOwner(resource.data) || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /attendance_correction_requests/{id} {
+      allow read: if signedIn() && (isOwner(resource.data) || isAdmin());
+      allow create: if signedIn();
+      allow update, delete: if isAdmin();
+    }
+
+    // ----------------------------------------------------
+    // ADVANCE SALARY REQUESTS
+    // ----------------------------------------------------
+    match /advanceSalaryRequests/{id} {
+      allow read: if signedIn() && (isOwner(resource.data) || isAdmin());
+      allow create: if signedIn();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ----------------------------------------------------
+    // PAYROLL & SALARY PROFILES
+    // ----------------------------------------------------
+    match /salaryProfiles/{id} {
+      allow read: if signedIn() && (isOwner(resource.data) || isAdmin());
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /payrollRecords/{id} {
+      allow read: if signedIn() && (isOwner(resource.data) || isAdmin());
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /payroll/{id} {
+      allow read: if signedIn() && (isOwner(resource.data) || isAdmin());
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ----------------------------------------------------
+    // TASKS
+    // ----------------------------------------------------
+    match /tasks/{id} {
+      allow read: if signedIn() && (resource.data.assignedToUid == myUid() || isOwner(resource.data) || isAdmin());
+      allow create: if isAdmin();
+      allow update: if signedIn() && (resource.data.assignedToUid == myUid() || isAdmin());
+      allow delete: if isAdmin();
+
+      match /history/{historyId} {
+        allow read: if signedIn();
+        allow create, update, delete: if signedIn();
+      }
+    }
+
+    // ----------------------------------------------------
+    // LEAVE REQUESTS
+    // ----------------------------------------------------
+    match /leaveRequests/{id} {
+      allow read: if signedIn() && (isOwner(resource.data) || isAdmin());
+      allow create: if signedIn();
+      allow update, delete: if isAdmin();
+    }
+
+    // ----------------------------------------------------
+    // EXPENSES
+    // ----------------------------------------------------
+    match /expenses/{id} {
+      allow read: if signedIn() && (isOwner(resource.data) || isAdmin());
+      allow create: if signedIn();
+      allow update: if isAdmin();
+      allow delete: if isAdmin() || (signedIn() && isOwner(resource.data));
+    }
+
+    // ----------------------------------------------------
+    // DAILY STATUS REPORTS (DSR)
+    // ----------------------------------------------------
+    match /daily_reports/{id} {
+      allow read: if signedIn() && (isOwner(resource.data) || isAdmin());
+      allow create: if signedIn();
+      allow update, delete: if isAdmin();
+    }
+
+    match /dsr/{id} {
+      allow read: if signedIn() && (isOwner(resource.data) || isAdmin());
+      allow create: if signedIn();
+      allow update, delete: if isAdmin();
+    }
+
+    // ----------------------------------------------------
+    // CRM CLIENTS & EQUIPMENT & BILLING
+    // ----------------------------------------------------
+    match /clients/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /equipment/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    match /billing/{id} {
+      allow read, write: if isAdmin();
+    }
+
+    match /invoices/{id} {
+      allow read, write: if isAdmin();
+    }
+
+    match /projects/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    // ----------------------------------------------------
+    // NOTIFICATIONS & CHAT
+    // ----------------------------------------------------
+    match /notifications/{id} {
+      allow read: if signedIn() && (isAdmin() || isOwner(resource.data));
+      allow create: if signedIn();
+      allow update, delete: if signedIn() && (isAdmin() || isOwner(resource.data));
+    }
+
+    match /team_messages/{id} {
+      allow read, create: if signedIn();
+      allow update, delete: if signedIn() && (resource.data.senderUid == myUid() || isAdmin());
+    }
+
+    match /direct_messages/{id} {
+      allow read, create: if signedIn();
+      allow update, delete: if signedIn() && (resource.data.senderUid == myUid() || isAdmin());
+    }
+
+    // ----------------------------------------------------
+    // COMPANY SETTINGS & CONFIG
+    // ----------------------------------------------------
+    match /company_settings/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    match /config/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

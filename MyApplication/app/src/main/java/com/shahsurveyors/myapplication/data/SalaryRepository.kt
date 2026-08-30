@@ -1,5 +1,6 @@
 package com.shahsurveyors.myapplication.data
 
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.SetOptions
@@ -11,20 +12,18 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 
 class SalaryRepository(
-    private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
+    private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance(),
+    private val auth: FirebaseAuth = FirebaseAuth.getInstance()
 ) {
 
     // ========================================================
     // SALARY PROFILES (HISTORICAL & EFFECTIVE DATED)
     // ========================================================
 
-    /**
-     * Saves a new salary profile.
-     * Closes the previous active profile without deleting historical records.
-     */
     suspend fun saveSalaryProfile(profile: SalaryProfileModel): Boolean = withContext(Dispatchers.IO) {
         try {
             val collection = firestore.collection("salaryProfiles")
+            val currentUid = auth.currentUser?.uid ?: ""
 
             // 1. Find existing active profiles for this employee
             val existingActiveDocs = collection
@@ -53,13 +52,27 @@ class SalaryRepository(
                 collection.document()
             }
 
-            val toSave = profile.copy(
-                id = newDocRef.id,
-                active = true,
-                setAt = System.currentTimeMillis()
+            val data = hashMapOf(
+                "id" to newDocRef.id,
+                "uid" to profile.employeeUid,
+                "employeeUid" to profile.employeeUid,
+                "employeeName" to profile.employeeName,
+                "employeeId" to profile.employeeId,
+                "department" to profile.department,
+                "payType" to profile.payType,
+                "monthlySalary" to profile.monthlySalary,
+                "dailyRate" to profile.dailyRate,
+                "overtimeRatePerHour" to profile.overtimeRatePerHour,
+                "effectiveFrom" to profile.effectiveFrom,
+                "effectiveTo" to profile.effectiveTo,
+                "note" to profile.note,
+                "setByUid" to currentUid,
+                "setByName" to profile.setByName,
+                "setAt" to System.currentTimeMillis(),
+                "active" to true
             )
 
-            batch.set(newDocRef, toSave)
+            batch.set(newDocRef, data)
             batch.commit().await()
             true
         } catch (e: Exception) {
@@ -73,22 +86,11 @@ class SalaryRepository(
             try {
                 val snapshot = firestore.collection("salaryProfiles")
                     .whereEqualTo("employeeUid", employeeUid)
-                    .orderBy("effectiveFrom", Query.Direction.DESCENDING)
                     .get()
                     .await()
-
-                snapshot.toObjects(SalaryProfileModel::class.java)
+                snapshot.toObjects(SalaryProfileModel::class.java).sortedByDescending { it.effectiveFrom }
             } catch (e: Exception) {
-                // Fallback without order by if index is building
-                try {
-                    val snapshot = firestore.collection("salaryProfiles")
-                        .whereEqualTo("employeeUid", employeeUid)
-                        .get()
-                        .await()
-                    snapshot.toObjects(SalaryProfileModel::class.java).sortedByDescending { it.effectiveFrom }
-                } catch (e2: Exception) {
-                    emptyList()
-                }
+                emptyList()
             }
         }
 
@@ -110,19 +112,31 @@ class SalaryRepository(
 
     suspend fun submitAdvanceSalaryRequest(request: AdvanceSalaryRequest): Boolean = withContext(Dispatchers.IO) {
         try {
+            val currentUid = auth.currentUser?.uid ?: request.employeeUid
             val docRef = if (request.id.isNotBlank()) {
                 firestore.collection("advanceSalaryRequests").document(request.id)
             } else {
                 firestore.collection("advanceSalaryRequests").document()
             }
 
-            val toSave = request.copy(
-                id = docRef.id,
-                status = "PENDING",
-                appliedAt = System.currentTimeMillis()
+            val data = hashMapOf(
+                "id" to docRef.id,
+                "uid" to currentUid,
+                "userUid" to currentUid,
+                "employeeUid" to currentUid,
+                "employeeName" to request.employeeName,
+                "employeeId" to request.employeeId,
+                "department" to request.department,
+                "requestedAmount" to request.requestedAmount,
+                "approvedAmount" to 0.0,
+                "installments" to request.installments,
+                "requestedMonth" to request.requestedMonth,
+                "reason" to request.reason,
+                "status" to "PENDING",
+                "appliedAt" to System.currentTimeMillis()
             )
 
-            docRef.set(toSave).await()
+            docRef.set(data).await()
             true
         } catch (e: Exception) {
             e.printStackTrace()
@@ -158,7 +172,7 @@ class SalaryRepository(
 
     suspend fun decideAdvanceRequest(
         requestId: String,
-        status: String, // APPROVED or REJECTED
+        status: String,
         approvedAmount: Double,
         installments: Int,
         adminUid: String,
@@ -193,6 +207,7 @@ class SalaryRepository(
 
     suspend fun savePayrollRecord(record: PayrollRecord): Boolean = withContext(Dispatchers.IO) {
         try {
+            val currentUid = auth.currentUser?.uid ?: ""
             firestore.collection("payrollRecords")
                 .document(record.id)
                 .set(record, SetOptions.merge())

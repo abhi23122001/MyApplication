@@ -357,10 +357,13 @@ class MainActivity : ComponentActivity() {
                                     onSubmit = { chainage, points, area, instrument, remarks, fileUri ->
                                         coroutineScope.launch {
                                             try {
+                                                val currentUid = authViewModel.userUid.ifBlank { com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: "" }
                                                 val dsrDoc = firestore.collection("daily_reports").document()
                                                 val dsrData = hashMapOf(
                                                     "id" to dsrDoc.id,
-                                                    "employeeUid" to authViewModel.userUid,
+                                                    "uid" to currentUid,
+                                                    "userUid" to currentUid,
+                                                    "employeeUid" to currentUid,
                                                     "employeeName" to authViewModel.userName,
                                                     "chainage" to chainage,
                                                     "points" to points,
@@ -371,6 +374,9 @@ class MainActivity : ComponentActivity() {
                                                     "submittedAt" to System.currentTimeMillis()
                                                 )
                                                 dsrDoc.set(dsrData).await()
+                                                try {
+                                                    firestore.collection("dsr").document(dsrDoc.id).set(dsrData).await()
+                                                } catch (e: Exception) { /* secondary sync */ }
                                                 Toast.makeText(context, "DSR Submitted Successfully", Toast.LENGTH_SHORT).show()
                                                 navController.popBackStack()
                                             } catch (e: Exception) {
