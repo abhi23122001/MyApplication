@@ -1,13 +1,19 @@
 package com.shahsurveyors.myapplication.data
 
 import com.google.firebase.Timestamp
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
 
 class NotificationRepository(
-    private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
+    private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance(),
+    private val auth: FirebaseAuth = FirebaseAuth.getInstance()
 ) {
     private val notifications = firestore.collection(FirebaseConstants.COLLECTION_NOTIFICATIONS)
+
+    private fun currentUid(): String =
+        auth.currentUser?.uid?.takeIf { it.isNotBlank() }
+            ?: throw IllegalStateException("Authentication required")
 
     suspend fun createForAdmins(
         type: String,
@@ -18,13 +24,15 @@ class NotificationRepository(
         referenceId: String = "",
         route: String = ""
     ) {
+        val senderUid = actorUid.ifBlank { currentUid() }
         notifications.add(
             mapOf(
                 "type" to type,
                 "title" to title,
                 "message" to message,
-                "actorUid" to actorUid,
+                "actorUid" to senderUid,
                 "actorName" to actorName,
+                "uid" to senderUid,
                 "referenceId" to referenceId,
                 "route" to route,
                 "targetRole" to FirebaseConstants.ROLE_ADMIN,
@@ -43,11 +51,14 @@ class NotificationRepository(
         route: String = ""
     ) {
         if (recipientUid.isBlank()) return
+        val senderUid = currentUid()
         notifications.add(
             mapOf(
                 "type" to type,
                 "title" to title,
                 "message" to message,
+                "uid" to senderUid,
+                "actorUid" to senderUid,
                 "referenceId" to referenceId,
                 "route" to route,
                 "recipientUid" to recipientUid,
