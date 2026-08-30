@@ -48,7 +48,9 @@ fun MoreModulesScreen(onNavigate: (String) -> Unit, onLogout: () -> Unit = {}) {
             .addOnFailureListener { loaded = true }
     }
 
-    fun allowed(module: ModuleData): Boolean = hasModuleAccess(access, module.permission)
+    val isAdmin = role.equals("admin", ignoreCase = true)
+    fun allowed(module: ModuleData): Boolean = isAdmin || hasModuleAccess(access, module.permission)
+
     val visiblePeople = peopleModules.filter(::allowed)
     val visibleProjects = projectModules.filter(::allowed)
     val visibleFinance = financeModules.filter(::allowed)
@@ -56,9 +58,28 @@ fun MoreModulesScreen(onNavigate: (String) -> Unit, onLogout: () -> Unit = {}) {
     val visibleReports = reportModules.filter(::allowed)
     val visibleAdmin = adminModules.filter(::allowed)
 
-    Scaffold(topBar = { TopAppBar(title = { Column { Text("More Modules", fontWeight = FontWeight.Bold, color = ShahWhite); Text("Assigned modules only", fontSize = 10.sp, color = ShahWhite.copy(.72f)) } }, colors = TopAppBarDefaults.topAppBarColors(containerColor = ShahDarkGreen)) }) { paddingValues ->
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Column { Text("More Modules", fontWeight = FontWeight.Bold, color = ShahWhite); Text("Assigned modules only", fontSize = 10.sp, color = ShahWhite.copy(.72f)) } },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = ShahDarkGreen)
+            )
+        }
+    ) { paddingValues ->
         LazyColumn(Modifier.padding(paddingValues).fillMaxSize().background(ShahGrey), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            item { Surface(Modifier.fillMaxWidth(), RoundedCornerShape(18.dp), color = ShahDarkGreen) { Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) { Surface(shape = RoundedCornerShape(14.dp), color = ShahWhite.copy(.12f)) { Icon(Icons.Default.Apps, null, tint = ShahWhite, modifier = Modifier.padding(11.dp).size(28.dp)) }; Spacer(Modifier.width(13.dp)); Column { Text("Everything in one place", color = ShahWhite, fontSize = 17.sp, fontWeight = FontWeight.Bold); Spacer(Modifier.height(3.dp)); Text(if (loaded) "Only assigned modules are shown" else "Loading permissions...", color = ShahWhite.copy(.72f), fontSize = 11.sp) } } } }
+            item {
+                Surface(Modifier.fillMaxWidth(), RoundedCornerShape(18.dp), color = ShahDarkGreen) {
+                    Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Surface(shape = RoundedCornerShape(14.dp), color = ShahWhite.copy(.12f)) { Icon(Icons.Default.Apps, null, tint = ShahWhite, modifier = Modifier.padding(11.dp).size(28.dp)) }
+                        Spacer(Modifier.width(13.dp))
+                        Column {
+                            Text("Everything in one place", color = ShahWhite, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.height(3.dp))
+                            Text(if (loaded) if (isAdmin) "Admin access: all modules" else "Only assigned modules are shown" else "Loading permissions...", color = ShahWhite.copy(.72f), fontSize = 11.sp)
+                        }
+                    }
+                }
+            }
             if (loaded) {
                 if (visiblePeople.isNotEmpty()) moduleSection("PEOPLE & HR", "Team, attendance & payroll", visiblePeople, onNavigate)
                 if (visibleProjects.isNotEmpty()) moduleSection("PROJECT & SURVEY", "Sites, survey & field operations", visibleProjects, onNavigate)
@@ -72,18 +93,39 @@ fun MoreModulesScreen(onNavigate: (String) -> Unit, onLogout: () -> Unit = {}) {
             } else {
                 item { Box(Modifier.fillMaxWidth().padding(vertical = 40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = ShahGreen) } }
             }
-            item { Card(Modifier.fillMaxWidth().clickable { showLogoutDialog = true }, RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = ShahWhite)) { Row(Modifier.padding(15.dp), verticalAlignment = Alignment.CenterVertically) { Surface(shape = RoundedCornerShape(12.dp), color = ErrorRed.copy(.10f)) { Icon(Icons.Default.Logout, null, tint = ErrorRed, modifier = Modifier.padding(10.dp).size(22.dp)) }; Spacer(Modifier.width(13.dp)); Column { Text("Logout", fontWeight = FontWeight.Bold, color = ErrorRed, fontSize = 14.sp); Text("Sign out of this device", fontSize = 11.sp, color = ShahMediumGrey) } } } }
+            item {
+                Card(Modifier.fillMaxWidth().clickable { showLogoutDialog = true }, RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = ShahWhite)) {
+                    Row(Modifier.padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Surface(shape = RoundedCornerShape(12.dp), color = ErrorRed.copy(.10f)) { Icon(Icons.Default.Logout, null, tint = ErrorRed, modifier = Modifier.padding(10.dp).size(22.dp)) }
+                        Spacer(Modifier.width(13.dp))
+                        Column { Text("Logout", fontWeight = FontWeight.Bold, color = ErrorRed, fontSize = 14.sp); Text("Sign out of this device", fontSize = 11.sp, color = ShahMediumGrey) }
+                    }
+                }
+            }
         }
     }
     if (showLogoutDialog) AlertDialog(onDismissRequest = { showLogoutDialog = false }, title = { Text("Logout?") }, text = { Text("Are you sure you want to sign out?") }, confirmButton = { TextButton(onClick = { showLogoutDialog = false; onLogout() }) { Text("LOGOUT", color = ErrorRed, fontWeight = FontWeight.Bold) } }, dismissButton = { TextButton(onClick = { showLogoutDialog = false }) { Text("CANCEL") } })
 }
 
-private fun androidx.compose.foundation.lazy.LazyListScope.moduleSection(title: String, subtitle: String, modules: List<ModuleData>, onNavigate: (String) -> Unit) { item { Column(Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 2.dp)) { Text(title, fontSize = 12.sp, color = ShahGreen, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp); Text(subtitle, fontSize = 10.sp, color = ShahMediumGrey) } }; items(modules, key = { it.route }) { module -> ModuleItem(module, onNavigate) } }
+private fun androidx.compose.foundation.lazy.LazyListScope.moduleSection(title: String, subtitle: String, modules: List<ModuleData>, onNavigate: (String) -> Unit) {
+    item { Column(Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 2.dp)) { Text(title, fontSize = 12.sp, color = ShahGreen, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp); Text(subtitle, fontSize = 10.sp, color = ShahMediumGrey) } }
+    items(modules, key = { it.route }) { module -> ModuleItem(module, onNavigate) }
+}
 
 @Composable
-fun ModuleItem(module: ModuleData, onNavigate: (String) -> Unit) { Card(Modifier.fillMaxWidth().clickable { onNavigate(module.route) }, RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = ShahWhite), elevation = CardDefaults.cardElevation(1.dp)) { Row(Modifier.padding(horizontal = 15.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) { Surface(shape = RoundedCornerShape(12.dp), color = ShahGreen.copy(.10f)) { Icon(module.icon, module.name, tint = ShahGreen, modifier = Modifier.padding(10.dp).size(22.dp)) }; Spacer(Modifier.width(13.dp)); Column(Modifier.weight(1f)) { Text(module.name, fontWeight = FontWeight.Bold, color = ShahBlack, fontSize = 14.sp); Spacer(Modifier.height(3.dp)); Text(module.description, fontSize = 11.sp, color = ShahMediumGrey) }; Icon(Icons.Default.ChevronRight, "Open", tint = ShahMediumGrey, modifier = Modifier.size(22.dp)) } } }
+fun ModuleItem(module: ModuleData, onNavigate: (String) -> Unit) {
+    Card(Modifier.fillMaxWidth().clickable { onNavigate(module.route) }, RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = ShahWhite), elevation = CardDefaults.cardElevation(1.dp)) {
+        Row(Modifier.padding(horizontal = 15.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Surface(shape = RoundedCornerShape(12.dp), color = ShahGreen.copy(.10f)) { Icon(module.icon, module.name, tint = ShahGreen, modifier = Modifier.padding(10.dp).size(22.dp)) }
+            Spacer(Modifier.width(13.dp))
+            Column(Modifier.weight(1f)) { Text(module.name, fontWeight = FontWeight.Bold, color = ShahBlack, fontSize = 14.sp); Spacer(Modifier.height(3.dp)); Text(module.description, fontSize = 11.sp, color = ShahMediumGrey) }
+            Icon(Icons.Default.ChevronRight, "Open", tint = ShahMediumGrey, modifier = Modifier.size(22.dp))
+        }
+    }
+}
 
 data class ModuleData(val name: String, val description: String, val icon: ImageVector, val route: String, val permission: String)
+
 val peopleModules = listOf(
     ModuleData("Employees", "Manage team and staff details", Icons.Default.Groups, "employees", "ADMIN"),
     ModuleData("Attendance", "Track daily presence & logs", Icons.Default.PunchClock, "attendance", "ATTENDANCE"),
