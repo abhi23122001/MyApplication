@@ -33,7 +33,9 @@ class UserRepository(
         return try {
             val document = usersCollection.document(currentUid).get().await()
             if (document.exists()) document.toObject(UserProfile::class.java) else null
-        } catch (e: Exception) { null }
+        } catch (e: Exception) {
+            null
+        }
     }
 
     suspend fun saveUserProfile(profile: UserProfile) {
@@ -44,18 +46,11 @@ class UserRepository(
                 .await()
             return
         }
-
-        // Cross-user profile creation is performed by the trusted callable
-        // backend. The backend re-checks that the caller is an active ADMIN.
         requireAdminUid()
         saveEmployeeProfileAsAdmin(profile)
     }
 
-    /**
-     * Explicit admin-only helper for creating/updating an employee profile.
-     * The write is delegated to Cloud Functions so Firestore rules do not need
-     * to expose a broad client-side cross-user write permission.
-     */
+    /** Secure admin-only employee profile writer for an already-created Auth UID. */
     suspend fun saveEmployeeProfileAsAdmin(profile: UserProfile) {
         requireAdminUid()
         require(profile.uid.isNotBlank()) { "Employee UID is required" }
@@ -65,15 +60,48 @@ class UserRepository(
 
         val data = hashMapOf<String, Any>(
             "uid" to profile.uid,
-            "name" to profile.name,
-            "email" to profile.email,
-            "department" to profile.department,
-            "access" to profile.access
+            "name" to profile.name.trim(),
+            "email" to profile.email.trim(),
+            "department" to profile.department.trim().uppercase(),
+            "access" to normalizeAccess(profile.access)
         )
 
         functions.getHttpsCallable("saveEmployeeProfileAsAdmin")
             .call(data)
             .await()
+    }
+
+    /**
+     * Creates both the Firebase Authentication account and the Firestore
+     * employee profile on the trusted backend. The admin's Android Auth
+     * session is never replaced by the new employee account.
+     */
+    suspend fun createEmployeeAccountAsAdmin(
+        name: String,
+        email: String,
+        password: String,
+        department: String,
+        access: String
+    ): String {
+        requireAdminUid()
+        require(name.isNotBlank()) { "Employee name is required" }
+        require(email.trim().contains("@")) { "Valid employee email is required" }
+        require(password.length >= 6) { "Password must be at least 6 characters" }
+        require(department.isNotBlank()) { "Department is required" }
+
+        val data = hashMapOf<String, Any>(
+            "name" to name.trim(),
+            "email" to email.trim(),
+            "password" to password,
+            "department" to department.trim().uppercase(),
+            "access" to normalizeAccess(access)
+        )
+        val result = functions.getHttpsCallable("createEmployeeAccountAsAdmin")
+            .call(data)
+            .await()
+        val uid = (result.data as? Map<*, *>)?.get("uid")?.toString().orEmpty()
+        require(uid.isNotBlank()) { "Employee account was created without a UID" }
+        return uid
     }
 
     suspend fun getAllEmployees(): List<UserProfile> {
@@ -107,16 +135,19 @@ class UserRepository(
     suspend fun updateUserAccess(uid: String, access: String) {
         requireAdminUid()
         require(uid.isNotBlank()) { "Employee ID is required" }
-        val normalizedAccess = access.split(",")
-            .map { it.trim().uppercase() }
-            .filter { it.isNotBlank() }
-            .distinct()
-            .joinToString(",")
         usersCollection.document(uid).update(
             mapOf(
-                "access" to normalizedAccess,
+                "access" to normalizeAccess(access),
                 "updatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()
             )
         ).await()
     }
+
+    private fun normalizeAccess(access: String): String =
+        access.split(",", ";", "|")
+            .map { it.trim().uppercase() }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .filter { it != "ALL" || access.contains("ALL", ignoreCase = true) }
+            .joinToString(",")
 }
