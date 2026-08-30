@@ -11,7 +11,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.google.firebase.firestore.FirebaseFirestore
+import com.shahsurveyors.myapplication.data.UserRepository
 import com.shahsurveyors.myapplication.models.UserProfile
 
 private val permissionModules = listOf(
@@ -32,15 +32,35 @@ private val permissionModules = listOf(
     "REPORTS" to "Reports"
 )
 
+/**
+ * One permission vocabulary is used by the UI and Firestore rules. A few
+ * legacy aliases are accepted so older profiles keep working after an
+ * employee's permissions are edited.
+ */
 fun hasModuleAccess(access: String, module: String): Boolean {
-    val values = access.split(",", ";", "|").map { it.trim().uppercase() }.filter { it.isNotBlank() }
-    return values.contains("ALL") || values.contains(module.uppercase())
+    val values = access
+        .split(",", ";", "|")
+        .map { it.trim().uppercase() }
+        .filter { it.isNotBlank() }
+        .toSet()
+    if (values.contains("ALL")) return true
+
+    val requested = module.trim().uppercase()
+    return when (requested) {
+        "EXPENSES" -> values.contains("EXPENSE") || values.contains("EXPENSES")
+        "EXPENSE" -> values.contains("EXPENSE") || values.contains("EXPENSES")
+        "PAYROLL" -> values.contains("SALARY") || values.contains("PAYROLL")
+        "SALARY" -> values.contains("SALARY") || values.contains("PAYROLL")
+        "ADVANCE_SALARY" -> values.contains("ADVANCE") || values.contains("ADVANCE_SALARY")
+        "ADVANCE" -> values.contains("ADVANCE") || values.contains("ADVANCE_SALARY")
+        else -> values.contains(requested)
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EmployeePermissionsScreen(onBack: () -> Unit = {}) {
-    val db = remember { FirebaseFirestore.getInstance() }
+    val repository = remember { UserRepository() }
     var employees by remember { mutableStateOf<List<UserProfile>>(emptyList()) }
     var selected by remember { mutableStateOf<UserProfile?>(null) }
     var loading by remember { mutableStateOf(true) }
@@ -48,14 +68,16 @@ fun EmployeePermissionsScreen(onBack: () -> Unit = {}) {
 
     fun load() {
         loading = true
-        db.collection("users").get()
-            .addOnSuccessListener { snap ->
-                employees = snap.toObjects(UserProfile::class.java)
-                    .filter { it.uid.isNotBlank() && !it.role.equals("admin", true) }
-                    .sortedBy { it.name.lowercase() }
+        error = null
+        kotlinx.coroutines.MainScope().launch {
+            try {
+                employees = repository.getAllEmployeesForReports()
+                loading = false
+            } catch (e: Exception) {
+                error = e.localizedMessage ?: "Unable to load employees"
                 loading = false
             }
-            .addOnFailureListener { error = it.localizedMessage ?: "Unable to load employees"; loading = false }
+        }
     }
 
     LaunchedEffect(Unit) { load() }
@@ -90,6 +112,7 @@ fun EmployeePermissionsScreen(onBack: () -> Unit = {}) {
                             Column(Modifier.padding(16.dp)) {
                                 Text(employee.name.ifBlank { "Unnamed employee" }, style = MaterialTheme.typography.titleMedium)
                                 Text(employee.department, style = MaterialTheme.typography.bodySmall)
+                                Text(if (employee.active) "ACTIVE" else "INACTIVE", style = MaterialTheme.typography.labelSmall)
                                 Text(if (employee.access.isBlank()) "No module access" else "Access: ${employee.access}", style = MaterialTheme.typography.bodySmall)
                                 Spacer(Modifier.height(6.dp))
                                 Text("EDIT PERMISSIONS", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
@@ -102,15 +125,25 @@ fun EmployeePermissionsScreen(onBack: () -> Unit = {}) {
     }
 
     selected?.let { employee ->
-        PermissionEditorDialog(employee = employee, onDismiss = { selected = null }, onSaved = { selected = null; load() })
+        PermissionEditorDialog(
+            employee = employee,
+            onDismiss = { selected = null },
+            onSaved = { selected = null; load() }
+        )
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PermissionEditorDialog(employee: UserProfile, onDismiss: () -> Unit, onSaved: () -> Unit) {
-    val db = remember { FirebaseFirestore.getInstance() }
-    val initial = remember(employee.uid) { employee.access.split(",").map { it.trim().uppercase() }.filter { it.isNotBlank() }.toSet() }
+    val repository = remember { UserRepository() }
+    val initial = remember(employee.uid) {
+        employee.access
+            .split(",", ";", "|")
+            .map { it.trim().uppercase() }
+            .filter { it.isNotBlank() }
+            .toSet()
+    }
     var selected by remember(employee.uid) { mutableStateOf(initial) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -125,8 +158,10 @@ private fun PermissionEditorDialog(employee: UserProfile, onDismiss: () -> Unit,
                 permissionModules.forEach { (key, label) ->
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                         Checkbox(
-                            checked = selected.contains(key),
-                            onCheckedChange = { checked -> selected = if (checked) selected + key else selected - key }
+                            checked = hasModuleAccess(selected.joinToString(","), key),
+                            onCheckedChange = { checked ->
+                                selected = if (checked) selected + key else selected - key
+                            }
                         )
                         Text(label)
                     }
@@ -138,11 +173,16 @@ private fun PermissionEditorDialog(employee: UserProfile, onDismiss: () -> Unit,
             Button(enabled = !saving, onClick = {
                 saving = true
                 error = null
-                val access = selected.filter { it != "ALL" }.joinToString(",")
-                db.collection("users").document(employee.uid)
-                    .update(mapOf("access" to access, "updatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()))
-                    .addOnSuccessListener { onSaved() }
-                    .addOnFailureListener { error = it.localizedMessage ?: "Unable to save permissions"; saving = false }
+                kotlinx.coroutines.MainScope().launch {
+                    try {
+                        val access = selected.filter { it != "ALL" }.joinToString(",")
+                        repository.updateUserAccess(employee.uid, access)
+                        onSaved()
+                    } catch (e: Exception) {
+                        error = e.localizedMessage ?: "Unable to save permissions"
+                        saving = false
+                    }
+                }
             }) { Text(if (saving) "Saving..." else "Save") }
         },
         dismissButton = { TextButton(enabled = !saving, onClick = onDismiss) { Text("Cancel") } }
