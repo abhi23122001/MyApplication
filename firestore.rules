@@ -32,8 +32,23 @@ service cloud.firestore {
 
     match /users/{uid} {
       allow read: if signedIn() && (uid == myUid() || isAdmin());
-      allow create: if signedIn() && uid == myUid();
-      allow update: if signedIn() && ((uid == myUid() && request.resource.data.uid == myUid()) || isAdmin());
+
+      // A user may create only a non-admin/non-privileged profile for themselves.
+      // Admin/activation/access elevation must be performed by an existing admin.
+      allow create: if signedIn()
+        && uid == myUid()
+        && request.resource.data.role != 'ADMIN'
+        && request.resource.data.access != 'ALL';
+
+      // Users may update their own profile, but cannot change security-sensitive fields.
+      allow update: if isAdmin()
+        || (signedIn()
+          && uid == myUid()
+          && request.resource.data.uid == myUid()
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.active == resource.data.active
+          && request.resource.data.access == resource.data.access);
+
       allow delete: if isAdmin();
     }
 
@@ -88,8 +103,7 @@ service cloud.firestore {
     }
 
     match /projects/{id} {
-      allow read: if isAdmin();
-      allow write: if isAdmin();
+      allow read, write: if isAdmin();
     }
 
     match /employees/{id} {
