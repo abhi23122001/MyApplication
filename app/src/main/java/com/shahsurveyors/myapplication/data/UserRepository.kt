@@ -14,6 +14,11 @@ class UserRepository(
     private val usersCollection = firestore.collection(FirebaseConstants.COLLECTION_USERS)
     private val functions: FirebaseFunctions = FirebaseFunctions.getInstance()
 
+    private val employeeAssignableAccess = setOf(
+        "ATTENDANCE", "TASKS", "CHAT", "LEAVE", "EXPENSE", "SALARY", "ADVANCE", "DSR",
+        "SURVEY", "MARKETING", "REPORTS"
+    )
+
     private fun requireCurrentUid(): String =
         auth.currentUser?.uid?.takeIf { it.isNotBlank() }
             ?: throw IllegalStateException("Authentication required")
@@ -30,12 +35,11 @@ class UserRepository(
     suspend fun getUserProfile(uid: String): UserProfile? {
         val currentUid = requireCurrentUid()
         require(uid == currentUid) { "Users may only access their own profile" }
-        return try {
-            val document = usersCollection.document(currentUid).get().await()
-            if (document.exists()) document.toObject(UserProfile::class.java) else null
-        } catch (e: Exception) {
-            null
-        }
+        val document = usersCollection.document(currentUid).get().await()
+        if (!document.exists()) return null
+        val profile = document.toObject(UserProfile::class.java) ?: return null
+        require(profile.uid == currentUid) { "User profile UID mismatch" }
+        return profile
     }
 
     suspend fun saveUserProfile(profile: UserProfile) {
@@ -50,7 +54,6 @@ class UserRepository(
         saveEmployeeProfileAsAdmin(profile)
     }
 
-    /** Secure admin-only employee profile writer for an already-created Auth UID. */
     suspend fun saveEmployeeProfileAsAdmin(profile: UserProfile) {
         requireAdminUid()
         require(profile.uid.isNotBlank()) { "Employee UID is required" }
@@ -71,11 +74,6 @@ class UserRepository(
             .await()
     }
 
-    /**
-     * Creates both the Firebase Authentication account and the Firestore
-     * employee profile on the trusted backend. The admin's Android Auth
-     * session is never replaced by the new employee account.
-     */
     suspend fun createEmployeeAccountAsAdmin(
         name: String,
         email: String,
@@ -143,11 +141,12 @@ class UserRepository(
         ).await()
     }
 
-    private fun normalizeAccess(access: String): String =
-        access.split(",", ";", "|")
+    private fun normalizeAccess(access: String): String {
+        val values = access.split(",", ";", "|")
             .map { it.trim().uppercase() }
             .filter { it.isNotBlank() }
             .distinct()
-            .filter { it != "ALL" || access.contains("ALL", ignoreCase = true) }
-            .joinToString(",")
+            .filter { it in employeeAssignableAccess }
+        return values.joinToString(",")
+    }
 }
