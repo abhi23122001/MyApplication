@@ -6,11 +6,11 @@ service cloud.firestore {
     function myUid() { return request.auth.uid; }
     function myUser() { return get(/databases/$(database)/documents/users/$(myUid())).data; }
     function isActive() { return signedIn() && myUser().active == true; }
-    function isAdmin() { return isActive() && myUser().role == 'ADMIN'; }
+    function isAdmin() { return isActive() && myUser().role.matches('(?i)^ADMIN$'); }
     function hasAccess(module) {
       return isAdmin() || (
         isActive() && (
-          myUser().access == 'ALL' ||
+          myUser().access.matches('(?i)(^|,)\\s*ALL\\s*(,|$)') ||
           myUser().access.matches('(?i)(^|,)\\s*' + module + '\\s*(,|$)') ||
           (module == 'EXPENSES' && myUser().access.matches('(?i)(^|,)\\s*EXPENSE\\s*(,|$)')) ||
           (module == 'PAYROLL' && myUser().access.matches('(?i)(^|,)\\s*SALARY\\s*(,|$)')) ||
@@ -22,8 +22,8 @@ service cloud.firestore {
 
     match /users/{uid} {
       allow read: if signedIn() && (uid == myUid() || isAdmin());
-      allow create: if isAdmin() && uid != myUid() && request.resource.data.uid == uid && request.resource.data.role != 'ADMIN';
-      allow create: if signedIn() && uid == myUid() && request.resource.data.role != 'ADMIN' && request.resource.data.access != 'ALL';
+      allow create: if isAdmin() && uid != myUid() && request.resource.data.uid == uid && !request.resource.data.role.matches('(?i)^ADMIN$');
+      allow create: if signedIn() && uid == myUid() && !request.resource.data.role.matches('(?i)^ADMIN$') && !request.resource.data.access.matches('(?i)(^|,)\\s*ALL\\s*(,|$)');
       allow update: if isAdmin() || (signedIn() && uid == myUid() && request.resource.data.uid == myUid() && request.resource.data.role == resource.data.role && request.resource.data.active == resource.data.active && request.resource.data.access == resource.data.access);
       allow delete: if isAdmin();
     }
