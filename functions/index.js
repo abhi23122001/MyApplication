@@ -26,15 +26,19 @@ async function requireActiveAdmin(callerUid) {
 }
 
 function normalizeAccess(access, fallback = DEFAULT_EMPLOYEE_ACCESS) {
-  const raw = String(access || fallback);
+  const raw = String(access ?? "").trim();
+  if (!raw) return fallback;
   const values = raw.split(/[,;|]/).map((value) => value.trim().toUpperCase()).filter(Boolean);
-  return [...new Set(values)].join(",") || fallback;
+  return [...new Set(values)].join(",");
 }
 
 function normalizeEmployeeAccess(access) {
-  const normalized = normalizeAccess(access);
-  const values = normalized.split(",").filter((value) => EMPLOYEE_ACCESS.has(value));
-  return values.length ? [...new Set(values)].join(",") : DEFAULT_EMPLOYEE_ACCESS;
+  const raw = String(access ?? "").trim();
+  if (!raw) return DEFAULT_EMPLOYEE_ACCESS;
+  const values = raw.split(/[,;|]/)
+    .map((value) => value.trim().toUpperCase())
+    .filter((value) => EMPLOYEE_ACCESS.has(value));
+  return [...new Set(values)].join(",");
 }
 
 async function resolveRecipients(data) {
@@ -198,6 +202,11 @@ exports.saveEmployeeProfileAsAdmin = onCall(async (request) => {
   const authEmail = String(authUser.email || "").trim().toLowerCase();
   if (!authEmail || authEmail !== requestedEmail) {
     throw new HttpsError("invalid-argument", "Employee email does not match Firebase Authentication");
+  }
+
+  const existingProfile = await db.collection("users").doc(uid).get();
+  if (existingProfile.exists && String(existingProfile.get("role") || "").trim().toUpperCase() === "ADMIN") {
+    throw new HttpsError("permission-denied", "An existing Admin profile cannot be converted to Employee");
   }
 
   await db.collection("users").doc(uid).set({
