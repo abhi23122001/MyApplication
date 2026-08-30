@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.shahsurveyors.myapplication.R
 import com.shahsurveyors.myapplication.data.NotificationRepository
+import com.shahsurveyors.myapplication.ui.admin.hasModuleAccess
 import com.shahsurveyors.myapplication.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.*
@@ -55,6 +56,8 @@ fun DashboardScreen(
     var showNotifications by remember { mutableStateOf(false) }
     var notificationCount by remember { mutableIntStateOf(0) }
     val notificationRepository = remember { NotificationRepository() }
+
+    fun can(module: String): Boolean = hasModuleAccess(userAccess, module)
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -119,8 +122,20 @@ fun DashboardScreen(
                     }
                 }
             }
-            item { SummarySection(viewModel, isAdmin, onEmployeesClick = onNavigateToAdmin, onAttendanceClick = onNavigateToAttendance, onProjectsClick = onNavigateToProjects, onExpensesClick = onNavigateToExpense) }
-            item { BroadcastSection(viewModel.noticeMessage.ifBlank { "No new admin announcements." }, onClick = if (isAdmin) onNavigateToBroadcast else null) }
+            item {
+                SummarySection(
+                    viewModel = viewModel,
+                    isAdmin = isAdmin,
+                    userAccess = userAccess,
+                    onEmployeesClick = onNavigateToAdmin,
+                    onAttendanceClick = onNavigateToAttendance,
+                    onProjectsClick = onNavigateToProjects,
+                    onExpensesClick = onNavigateToExpense
+                )
+            }
+            if (isAdmin || can("CHAT")) {
+                item { BroadcastSection(viewModel.noticeMessage.ifBlank { "No new admin announcements." }, onClick = if (isAdmin) onNavigateToBroadcast else null) }
+            }
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
@@ -130,7 +145,15 @@ fun DashboardScreen(
                     Icon(Icons.Default.Bolt, null, tint = WarningAmber)
                 }
                 Spacer(Modifier.height(10.dp))
-                QuickActionsGrid(onNavigateToAttendance, onNavigateToExpense, onNavigateToAdmin, onNavigateToBilling, onNavigateToTasks, isAdmin)
+                QuickActionsGrid(
+                    onAttendance = onNavigateToAttendance,
+                    onExpense = onNavigateToExpense,
+                    onAdmin = onNavigateToAdmin,
+                    onBilling = onNavigateToBilling,
+                    onTasks = onNavigateToTasks,
+                    userAccess = userAccess,
+                    isAdmin = isAdmin
+                )
             }
         }
     }
@@ -142,21 +165,51 @@ fun DashboardScreen(
 fun SummarySection(
     viewModel: DashboardViewModel,
     isAdmin: Boolean,
+    userAccess: String,
     onEmployeesClick: () -> Unit = {},
     onAttendanceClick: () -> Unit = {},
     onProjectsClick: () -> Unit = {},
     onExpensesClick: () -> Unit = {}
 ) {
+    val canAttendance = hasModuleAccess(userAccess, "ATTENDANCE")
+    val canEmployees = hasModuleAccess(userAccess, "ADMIN")
+    val canProjects = hasModuleAccess(userAccess, "PROJECTS")
+    val canExpenses = hasModuleAccess(userAccess, "EXPENSE")
+
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            SummaryCard("Employees", viewModel.totalEmployees.toString(), Icons.Default.People, ShahGreen, Modifier.weight(1f), onEmployeesClick)
-            SummaryCard("Attendance", "${viewModel.presentToday} Present", Icons.Default.CheckCircle, SuccessGreen, Modifier.weight(1f), onAttendanceClick)
+        val topCards = buildList {
+            if (canEmployees) add(Triple("Employees", viewModel.totalEmployees.toString(), Icons.Default.People to ShahGreen))
+            if (canAttendance) add(Triple("Attendance", "${viewModel.presentToday} Present", Icons.Default.CheckCircle to SuccessGreen))
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            SummaryCard("Projects", viewModel.activeProjects.toString(), Icons.Default.Work, ShahDarkGreen, Modifier.weight(1f), onProjectsClick)
-            SummaryCard("Expenses", viewModel.monthlyExpenses, Icons.Default.AccountBalanceWallet, WarningAmber, Modifier.weight(1f), onExpensesClick)
+        if (topCards.isNotEmpty()) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                topCards.forEach { (title, value, iconColor) ->
+                    SummaryCard(title, value, iconColor.first, iconColor.second, Modifier.weight(1f), when (title) {
+                        "Employees" -> onEmployeesClick
+                        else -> onAttendanceClick
+                    })
+                }
+                if (topCards.size == 1) Spacer(Modifier.weight(1f))
+            }
         }
-        if (isAdmin) {
+
+        val secondCards = buildList {
+            if (canProjects) add(Triple("Projects", viewModel.activeProjects.toString(), Icons.Default.Work to ShahDarkGreen))
+            if (canExpenses) add(Triple("Expenses", viewModel.monthlyExpenses, Icons.Default.AccountBalanceWallet to WarningAmber))
+        }
+        if (secondCards.isNotEmpty()) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                secondCards.forEach { (title, value, iconColor) ->
+                    SummaryCard(title, value, iconColor.first, iconColor.second, Modifier.weight(1f), when (title) {
+                        "Projects" -> onProjectsClick
+                        else -> onExpensesClick
+                    })
+                }
+                if (secondCards.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
+
+        if (isAdmin && hasModuleAccess(userAccess, "ADMIN")) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 SummaryCard("Salary Liability", viewModel.salaryLiability, Icons.Default.Payments, ErrorRed, Modifier.weight(1f))
                 SummaryCard("Estimated Profit", viewModel.estimatedProfit, Icons.Default.TrendingUp, SuccessGreen, Modifier.weight(1f))
@@ -221,14 +274,19 @@ fun QuickActionsGrid(
     onAdmin: () -> Unit,
     onBilling: () -> Unit,
     onTasks: () -> Unit,
+    userAccess: String,
     isAdmin: Boolean
 ) {
     val actions = buildList {
-        add(QuickAction("Punch IN / OUT", Icons.Default.AccessTime, onAttendance))
-        add(QuickAction("Add Expense", Icons.Default.ReceiptLong, onExpense))
-        add(QuickAction("Create Quote", Icons.Default.Description, onBilling))
-        add(QuickAction(if (isAdmin) "Assign Task" else "My Tasks", Icons.Default.Assignment, onTasks))
-        if (isAdmin) add(QuickAction("Add Employee", Icons.Default.PersonAdd, onAdmin))
+        if (hasModuleAccess(userAccess, "ATTENDANCE")) add(QuickAction("Punch IN / OUT", Icons.Default.AccessTime, onAttendance))
+        if (hasModuleAccess(userAccess, "EXPENSE")) add(QuickAction("Add Expense", Icons.Default.ReceiptLong, onExpense))
+        if (hasModuleAccess(userAccess, "BILLING")) add(QuickAction("Create Quote", Icons.Default.Description, onBilling))
+        if (hasModuleAccess(userAccess, "TASKS")) add(QuickAction(if (isAdmin) "Assign Task" else "My Tasks", Icons.Default.Assignment, onTasks))
+        if (hasModuleAccess(userAccess, "ADMIN")) add(QuickAction("Add Employee", Icons.Default.PersonAdd, onAdmin))
+    }
+    if (actions.isEmpty()) {
+        Text("No quick actions assigned.", color = ShahMediumGrey, fontSize = 12.sp)
+        return
     }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         actions.chunked(2).forEach { rowActions ->

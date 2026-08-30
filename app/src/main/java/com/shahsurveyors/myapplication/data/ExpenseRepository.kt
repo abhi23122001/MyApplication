@@ -7,68 +7,70 @@ import com.shahsurveyors.myapplication.models.ExpenseRecord
 import kotlinx.coroutines.tasks.await
 
 class ExpenseRepository(
-    private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
+    private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance(),
+    private val auth: FirebaseAuth = FirebaseAuth.getInstance()
 ) {
-    private val expensesCollection =
-        firestore.collection(FirebaseConstants.COLLECTION_EXPENSES)
-
+    private val expensesCollection = firestore.collection(FirebaseConstants.COLLECTION_EXPENSES)
+    private val usersCollection = firestore.collection(FirebaseConstants.COLLECTION_USERS)
     private val notificationRepository = NotificationRepository(firestore)
 
+    private fun requireCurrentUid(): String =
+        auth.currentUser?.uid?.takeIf { it.isNotBlank() }
+            ?: throw IllegalStateException("Authentication required")
+
+    private suspend fun requireAdminUid(): String {
+        val uid = requireCurrentUid()
+        val profile = usersCollection.document(uid).get().await()
+            .toObject(com.shahsurveyors.myapplication.models.UserProfile::class.java)
+        require(profile?.active == true && profile.role.equals(FirebaseConstants.ROLE_ADMIN, ignoreCase = true)) {
+            "Admin authorization required"
+        }
+        return uid
+    }
+
     suspend fun getExpensesForUser(uid: String): List<ExpenseRecord> = try {
-        expensesCollection
-            .whereEqualTo("uid", uid)
-            .get()
-            .await()
+        val currentUid = requireCurrentUid()
+        require(uid == currentUid) { "Users may only access their own expenses" }
+        expensesCollection.whereEqualTo("uid", currentUid).get().await()
             .toObjects(ExpenseRecord::class.java)
             .sortedByDescending { it.date?.seconds ?: 0L }
     } catch (_: Exception) {
         emptyList()
     }
 
-    suspend fun getAllExpenses(): List<ExpenseRecord> = try {
-        expensesCollection
-            .get()
-            .await()
+    suspend fun getAllExpenses(): List<ExpenseRecord> {
+        requireAdminUid()
+        return expensesCollection.get().await()
             .toObjects(ExpenseRecord::class.java)
             .sortedByDescending { it.date?.seconds ?: 0L }
-    } catch (_: Exception) {
-        emptyList()
     }
 
     suspend fun hasDuplicateExpense(uid: String, duplicateKey: String): Boolean {
         if (uid.isBlank() || duplicateKey.isBlank()) return false
-
-        return getExpensesForUser(uid)
-            .any {
-                it.duplicateKey == duplicateKey &&
-                        it.status != "REJECTED"
-            }
+        return getExpensesForUser(uid).any { it.duplicateKey == duplicateKey && it.status != "REJECTED" }
     }
 
-    // Employee submits expense -> Admin notification
     suspend fun saveExpense(expense: ExpenseRecord) {
-        val id = expense.id.ifBlank {
-            expensesCollection.document().id
-        }
+        val currentUid = requireCurrentUid()
+        val id = expense.id.ifBlank { expensesCollection.document().id }
 
-        val saved = expense.copy(id = id)
+        // Ownership is always taken from Firebase Authentication, never from the caller.
+        val saved = expense.copy(
+            id = id,
+            uid = currentUid,
+            status = "PENDING",
+            paymentStatus = "UNPAID",
+            reviewedByUid = "",
+            reviewedByName = ""
+        )
 
-        expensesCollection
-            .document(id)
-            .set(saved)
-            .await()
-
+        expensesCollection.document(id).set(saved).await()
         runCatching {
             notificationRepository.createForAdmins(
                 type = "EXPENSE_SUBMITTED",
                 title = "New Expense Request",
-                message = "${saved.userName.ifBlank { "Employee" }} submitted an expense of ₹${"%.2f".format(saved.amount)}" +
-                        saved.projectName
-                            .takeIf { it.isNotBlank() }
-                            ?.let { " for $it" }
-                            .orEmpty() +
-                        ".",
-                actorUid = saved.uid,
+                message = "${saved.userName.ifBlank { "Employee" }} submitted an expense of ₹${"%.2f".format(saved.amount)}${saved.projectName.takeIf { it.isNotBlank() }?.let { " for $it" } ?: ""}.",
+                actorUid = currentUid,
                 actorName = saved.userName,
                 referenceId = id,
                 route = "expense"
@@ -76,7 +78,6 @@ class ExpenseRepository(
         }
     }
 
-    // Admin approves/rejects expense -> Employee notification
     suspend fun updateExpenseReview(
         id: String,
         status: String,
@@ -84,29 +85,10 @@ class ExpenseRepository(
         reviewerUid: String,
         reviewerName: String
     ) {
+        requireAdminUid()
+        require(reviewerUid == auth.currentUser?.uid) { "Reviewer must be the authenticated admin" }
         val normalizedStatus = status.uppercase()
-
-        require(
-            normalizedStatus == "APPROVED" ||
-                    normalizedStatus == "REJECTED"
-        ) {
-            "Invalid expense status"
-        }
-
-        // Get expense BEFORE updating it so we know the employee UID/name.
-        val expenseSnapshot = expensesCollection
-            .document(id)
-            .get()
-            .await()
-
-        require(expenseSnapshot.exists()) {
-            "Expense not found"
-        }
-
-        val expense = expenseSnapshot
-            .toObject(ExpenseRecord::class.java)
-            ?: throw IllegalStateException("Expense data unavailable")
-
+        require(normalizedStatus == "APPROVED" || normalizedStatus == "REJECTED") { "Invalid expense status" }
         val updates = mutableMapOf<String, Any>(
             "status" to normalizedStatus,
             "adminRemark" to adminRemark.trim(),
@@ -114,132 +96,21 @@ class ExpenseRepository(
             "reviewedByName" to reviewerName,
             "reviewedAt" to Timestamp.now()
         )
-
-        updates["paymentStatus"] =
-            if (normalizedStatus == "REJECTED") {
-                "NOT_PAYABLE"
-            } else {
-                "UNPAID"
-            }
-
-        expensesCollection
-            .document(id)
-            .update(updates)
-            .await()
-
-        // Notify the employee who submitted the expense.
-        if (expense.uid.isNotBlank()) {
-            runCatching {
-                val title =
-                    if (normalizedStatus == "APPROVED") {
-                        "Expense Approved"
-                    } else {
-                        "Expense Rejected"
-                    }
-
-                val message =
-                    if (normalizedStatus == "APPROVED") {
-                        "Your expense request has been approved by ${reviewerName.ifBlank { "Admin" }}."
-                    } else {
-                        "Your expense request has been rejected by ${reviewerName.ifBlank { "Admin" }}." +
-                                adminRemark
-                                    .takeIf { it.isNotBlank() }
-                                    ?.let { " Remark: $it" }
-                                    .orEmpty()
-                    }
-
-                notificationRepository.createForUser(
-                    expense.uid,
-                    "EXPENSE_$normalizedStatus",
-                    title,
-                    message,
-                    id,
-                    "expense"
-                )
-            }
-        }
+        updates["paymentStatus"] = if (normalizedStatus == "REJECTED") "NOT_PAYABLE" else "UNPAID"
+        expensesCollection.document(id).update(updates).await()
     }
 
-    // Admin marks expense as PAID -> Employee notification
     suspend fun markExpensePaid(id: String) {
-        val adminUid =
-            FirebaseAuth.getInstance().currentUser?.uid ?: "ADMIN"
-
-        val expenseSnapshot = expensesCollection
-            .document(id)
-            .get()
-            .await()
-
-        require(expenseSnapshot.exists()) {
-            "Expense not found"
-        }
-
-        val expense = expenseSnapshot
-            .toObject(ExpenseRecord::class.java)
-            ?: throw IllegalStateException("Expense data unavailable")
-
-        expensesCollection
-            .document(id)
-            .update(
-                mapOf(
-                    "paymentStatus" to "PAID",
-                    "paidByUid" to adminUid,
-                    "paidAt" to Timestamp.now()
-                )
-            )
-            .await()
-
-        if (expense.uid.isNotBlank()) {
-            runCatching {
-                notificationRepository.createForUser(
-                    expense.uid,
-                    "EXPENSE_PAID",
-                    "Expense Paid",
-                    "Your expense has been marked as paid.",
-                    id,
-                    "expense"
-                )
-            }
-        }
+        val uid = requireAdminUid()
+        expensesCollection.document(id).update(
+            mapOf("paymentStatus" to "PAID", "paidByUid" to uid, "paidAt" to Timestamp.now())
+        ).await()
     }
 
-    // Admin changes PAID -> UNPAID -> Employee notification
     suspend fun markExpenseUnpaid(id: String) {
-        val expenseSnapshot = expensesCollection
-            .document(id)
-            .get()
-            .await()
-
-        require(expenseSnapshot.exists()) {
-            "Expense not found"
-        }
-
-        val expense = expenseSnapshot
-            .toObject(ExpenseRecord::class.java)
-            ?: throw IllegalStateException("Expense data unavailable")
-
-        expensesCollection
-            .document(id)
-            .update(
-                mapOf(
-                    "paymentStatus" to "UNPAID",
-                    "paidByUid" to "",
-                    "paidAt" to null
-                )
-            )
-            .await()
-
-        if (expense.uid.isNotBlank()) {
-            runCatching {
-                notificationRepository.createForUser(
-                    expense.uid,
-                    "EXPENSE_UNPAID",
-                    "Expense Payment Updated",
-                    "Your expense payment status has been changed to unpaid.",
-                    id,
-                    "expense"
-                )
-            }
-        }
+        requireAdminUid()
+        expensesCollection.document(id).update(
+            mapOf("paymentStatus" to "UNPAID", "paidByUid" to "", "paidAt" to null)
+        ).await()
     }
 }

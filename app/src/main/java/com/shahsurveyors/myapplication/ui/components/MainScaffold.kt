@@ -16,7 +16,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import com.shahsurveyors.myapplication.ui.admin.hasModuleAccess
+import com.shahsurveyors.myapplication.data.ModuleAccess
 import com.shahsurveyors.myapplication.ui.theme.*
 
 sealed class BottomNavItem(
@@ -30,27 +30,6 @@ sealed class BottomNavItem(
     data object Employees : BottomNavItem("employees", Icons.Default.Groups, "Employees", "ADMIN")
     data object Chat : BottomNavItem("chat", Icons.AutoMirrored.Filled.Chat, "Chat", "CHAT")
     data object More : BottomNavItem("more", Icons.Default.MoreHoriz, "More", null)
-}
-
-private fun routeModule(route: String?): String? = when (route) {
-    "attendance" -> "ATTENDANCE"
-    "employees" -> "ADMIN"
-    "chat" -> "CHAT"
-    "leave" -> "LEAVE"
-    "advance_salary" -> "ADVANCE"
-    "salary" -> "SALARY"
-    "projects" -> "PROJECTS"
-    "survey" -> "SURVEY"
-    "equipment" -> "EQUIPMENT"
-    "tasks" -> "TASKS"
-    "dsr" -> "DSR"
-    "expense" -> "EXPENSE"
-    "billing", "quotes" -> "BILLING"
-    "clients" -> "CLIENTS"
-    "marketing" -> "MARKETING"
-    "employee_reports", "reports_finance", "reports_work" -> "REPORTS"
-    "admin_hub", "communication", "company_settings", "bank_details", "terms_conditions", "settings", "employee_permissions" -> "ADMIN"
-    else -> null
 }
 
 @Composable
@@ -81,15 +60,13 @@ fun MainScaffold(currentRoute: String?, onNavigate: (String) -> Unit, content: @
             }
     }
 
-    val isAdmin = role.equals("admin", ignoreCase = true)
     fun allowed(route: String?): Boolean {
         if (route == null || route == "dashboard" || route == "more" || route == "splash" || route == "login" || route == "signup") return true
-        val module = routeModule(route) ?: return false
-        return isAdmin || hasModuleAccess(access, module)
+        return ModuleAccess.isAllowed(route, role, access)
     }
 
     val items = listOf(BottomNavItem.Home, BottomNavItem.Attendance, BottomNavItem.Employees, BottomNavItem.Chat, BottomNavItem.More)
-        .filter { it.module == null || isAdmin || hasModuleAccess(access, it.module) }
+        .filter { it.module == null || role.equals("admin", ignoreCase = true) || ModuleAccess.isAllowed(it.route, role, access) }
 
     Scaffold(
         bottomBar = {
