@@ -32,12 +32,15 @@ object ModuleAccess {
         "settings" to setOf("ADMIN_HUB", "ADMIN")
     )
 
+    private val publicRoutes = setOf("dashboard", "more", "splash", "login", "signup")
+
     fun requiredPermissions(route: String): Set<String> = routePermissions[route].orEmpty()
 
     fun isAllowed(route: String, role: String, access: String): Boolean {
+        if (route in publicRoutes) return true
         if (role.trim().equals("admin", ignoreCase = true)) return true
-        val required = requiredPermissions(route)
-        if (required.isEmpty()) return true
+        val required = routePermissions[route] ?: return false
+        if (required.isEmpty()) return false
         val granted = access.split(',', ';', '|')
             .map { it.trim().uppercase().replace(' ', '_') }
             .filter { it.isNotBlank() }
