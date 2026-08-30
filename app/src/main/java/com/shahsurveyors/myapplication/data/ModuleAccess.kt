@@ -33,6 +33,11 @@ object ModuleAccess {
     )
 
     private val publicRoutes = setOf("dashboard", "more", "splash", "login", "signup")
+    private val employeeAssignable = setOf(
+        "ATTENDANCE", "EXPENSE", "EXPENSES", "PAYROLL", "SALARY", "ADVANCE", "ADVANCE_SALARY",
+        "TASKS", "TASK", "LEAVE", "LEAVES", "DSR", "DAILY_STATUS_REPORT", "CHAT",
+        "SURVEY", "MARKETING", "REPORTS", "EMPLOYEE_REPORTS"
+    )
 
     fun requiredPermissions(route: String): Set<String> = routePermissions[route].orEmpty()
 
@@ -45,6 +50,8 @@ object ModuleAccess {
             .map { it.trim().uppercase().replace(' ', '_') }
             .filter { it.isNotBlank() }
             .toSet()
-        return "ALL" in granted || required.any(granted::contains)
+            .filter { it in employeeAssignable }
+            .toSet()
+        return required.any(granted::contains)
     }
 }
