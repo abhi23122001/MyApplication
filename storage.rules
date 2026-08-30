@@ -6,9 +6,23 @@ service firebase.storage {
       return request.auth != null;
     }
 
+    function userData() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+    }
+
     function isAdmin() {
-      return signedIn() && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.active == true
-        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'ADMIN';
+      return signedIn() && userData().active == true && userData().role.matches('(?i)^ADMIN$');
+    }
+
+    function hasModule(module) {
+      return isAdmin() || (
+        signedIn() && userData().active == true && (
+          userData().access.matches('(?i)(^|,)\\s*ALL\\s*(,|$)') ||
+          userData().access.matches('(?i)(^|,)\\s*' + module + '\\s*(,|$)') ||
+          (module == 'EXPENSE' && userData().access.matches('(?i)(^|,)\\s*EXPENSES\\s*(,|$)')) ||
+          (module == 'DSR' && userData().access.matches('(?i)(^|,)\\s*DAILY_STATUS_REPORT\\s*(,|$)'))
+        )
+      );
     }
 
     function isOwner(uid) {
@@ -16,19 +30,22 @@ service firebase.storage {
     }
 
     match /attendance/selfies/{uid}/{fileName} {
-      allow read, write: if isAdmin() || isOwner(uid);
+      allow read, write: if isOwner(uid) && hasModule('ATTENDANCE');
+      allow read, write: if isAdmin();
     }
 
     match /expenses/receipts/{uid}/{fileName} {
-      allow read, write: if isAdmin() || isOwner(uid);
+      allow read, write: if isOwner(uid) && hasModule('EXPENSE');
+      allow read, write: if isAdmin();
     }
 
     match /dsr/photos/{uid}/{fileName} {
-      allow read, write: if isAdmin() || isOwner(uid);
+      allow read, write: if isOwner(uid) && hasModule('DSR');
+      allow read, write: if isAdmin();
     }
 
     match /billing/documents/{uid}/{fileName} {
-      allow read, write: if isAdmin() || isOwner(uid);
+      allow read, write: if isAdmin();
     }
 
     match /{allPaths=**} {
