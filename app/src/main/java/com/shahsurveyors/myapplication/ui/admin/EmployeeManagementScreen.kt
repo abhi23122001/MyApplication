@@ -1,6 +1,5 @@
 package com.shahsurveyors.myapplication.ui.admin
 
-import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -17,19 +16,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.google.firebase.FirebaseApp
-import com.google.firebase.auth.FirebaseAuth
 import com.shahsurveyors.myapplication.data.SalaryRepository
 import com.shahsurveyors.myapplication.data.UserRepository
 import com.shahsurveyors.myapplication.models.SalaryProfileModel
 import com.shahsurveyors.myapplication.models.UserProfile
 import com.shahsurveyors.myapplication.ui.theme.*
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -121,33 +116,133 @@ private fun EmployeeDetailsDialog(employee: UserProfile, onDismiss: () -> Unit) 
     AlertDialog(onDismissRequest = onDismiss, title = { Text(employee.name, fontWeight = FontWeight.Bold) }, text = { Column(verticalArrangement = Arrangement.spacedBy(7.dp)) { DetailRow("Email", employee.email); DetailRow("User ID", employee.uid); DetailRow("Role", employee.role); DetailRow("Department", employee.department); DetailRow("Access", employee.access.ifBlank { "No module access" }); DetailRow("Approved", if (employee.approved) "Yes" else "No"); DetailRow("Active", if (employee.active) "Yes" else "No") } }, confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } })
 }
 
-@Composable private fun DetailRow(label: String, value: String) { Column { Text(label, fontSize = 10.sp, color = ShahMediumGrey, fontWeight = FontWeight.Bold); Text(value.ifBlank { "—" }, fontSize = 13.sp) } }
+@Composable
+private fun DetailRow(label: String, value: String) { Column { Text(label, fontSize = 10.sp, color = ShahMediumGrey, fontWeight = FontWeight.Bold); Text(value.ifBlank { "—" }, fontSize = 13.sp) } }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddEmployeeDialog(onDismiss: () -> Unit, onCreated: () -> Unit) {
-    val context = LocalContext.current; val scope = rememberCoroutineScope(); val repository = remember { UserRepository() }
-    var name by remember { mutableStateOf("") }; var email by remember { mutableStateOf("") }; var password by remember { mutableStateOf("") }; var department by remember { mutableStateOf("SURVEY") }; var loading by remember { mutableStateOf(false) }; var error by remember { mutableStateOf<String?>(null) }
-    AlertDialog(onDismissRequest = { if (!loading) onDismiss() }, title = { Text("Add Employee") }, text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        OutlinedTextField(name, { name = it }, label = { Text("Full name") }, modifier = Modifier.fillMaxWidth()); OutlinedTextField(email, { email = it.trim() }, label = { Text("Email") }, modifier = Modifier.fillMaxWidth()); OutlinedTextField(password, { password = it }, label = { Text("Temporary password") }, modifier = Modifier.fillMaxWidth()); OutlinedTextField(department, { department = it.uppercase() }, label = { Text("Department") }, modifier = Modifier.fillMaxWidth()); error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-    } }, confirmButton = { Button(enabled = !loading && name.isNotBlank() && email.contains("@") && password.length >= 6 && department.isNotBlank(), onClick = { scope.launch { loading = true; try { createEmployeeAccount(context, name.trim(), email.trim(), password, department.trim(), repository); onCreated() } catch (e: Exception) { error = e.localizedMessage ?: "Unable to create employee" } finally { loading = false } } }) { Text(if (loading) "Creating..." else "Create Employee") } }, dismissButton = { TextButton(enabled = !loading, onClick = onDismiss) { Text("Cancel") } })
-}
+    val scope = rememberCoroutineScope()
+    val repository = remember { UserRepository() }
+    var name by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var department by remember { mutableStateOf("SURVEY") }
+    var access by remember { mutableStateOf("ATTENDANCE,CHAT") }
+    var loading by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
 
-private suspend fun createEmployeeAccount(context: Context, name: String, email: String, password: String, department: String, repository: UserRepository) {
-    val appName = "employee_creator_${System.currentTimeMillis()}"; val secondaryApp = FirebaseApp.initializeApp(context, FirebaseApp.getInstance().options, appName) ?: error("Unable to initialize Firebase")
-    try { val auth = FirebaseAuth.getInstance(secondaryApp); val result = auth.createUserWithEmailAndPassword(email, password).await(); val uid = result.user?.uid ?: error("Firebase did not return employee UID"); repository.saveUserProfile(UserProfile(uid = uid, name = name, email = email, role = "employee", department = department, access = "ATTENDANCE,CHAT", approved = true, active = true)) } finally { secondaryApp.delete() }
+    AlertDialog(
+        onDismissRequest = { if (!loading) onDismiss() },
+        title = { Text("Add Employee") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(name, { name = it }, label = { Text("Full name") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(email, { email = it.trim() }, label = { Text("Email") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(password, { password = it }, label = { Text("Temporary password") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(department, { department = it.uppercase() }, label = { Text("Department") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(access, { access = it.uppercase() }, label = { Text("Initial module access") }, supportingText = { Text("Example: ATTENDANCE,CHAT,EXPENSE") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            }
+        },
+        confirmButton = {
+            Button(
+                enabled = !loading && name.isNotBlank() && email.contains("@") && password.length >= 6 && department.isNotBlank(),
+                onClick = {
+                    scope.launch {
+                        loading = true
+                        error = null
+                        try {
+                            repository.createEmployeeAccountAsAdmin(name, email, password, department, access)
+                            onCreated()
+                        } catch (e: Exception) {
+                            error = e.localizedMessage ?: "Unable to create employee account"
+                        } finally {
+                            loading = false
+                        }
+                    }
+                }
+            ) { Text(if (loading) "Creating..." else "Create Employee") }
+        },
+        dismissButton = { TextButton(enabled = !loading, onClick = onDismiss) { Text("Cancel") } }
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SalarySettingsDialog(employee: UserProfile, onDismiss: () -> Unit) {
-    val repository = remember { SalaryRepository() }; val scope = rememberCoroutineScope(); val today = remember { SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH).format(Date()) }
-    var payType by remember { mutableStateOf("MONTHLY") }; var monthlySalary by remember { mutableStateOf("") }; var dailyRate by remember { mutableStateOf("") }; var overtimeRate by remember { mutableStateOf("") }; var effectiveFrom by remember { mutableStateOf(today) }; var note by remember { mutableStateOf("") }; var history by remember { mutableStateOf<List<SalaryProfileModel>>(emptyList()) }; var saving by remember { mutableStateOf(false) }; var error by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(employee.uid) { try { history = repository.getHistory(employee.uid); history.firstOrNull()?.let { c -> payType = c.payType; monthlySalary = if (c.monthlySalary > 0) c.monthlySalary.toString() else ""; dailyRate = if (c.dailyRate > 0) c.dailyRate.toString() else ""; overtimeRate = if (c.overtimeRatePerHour > 0) c.overtimeRatePerHour.toString() else "" } } catch (e: Exception) { error = e.localizedMessage } }
-    AlertDialog(onDismissRequest = { if (!saving) onDismiss() }, title = { Text("Salary Settings — ${employee.name}") }, text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Button(onClick = { payType = "MONTHLY" }, modifier = Modifier.weight(1f)) { Text("Monthly") }; Button(onClick = { payType = "DAILY" }, modifier = Modifier.weight(1f)) { Text("Daily") } }
-        if (payType == "MONTHLY") OutlinedTextField(monthlySalary, { monthlySalary = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Monthly salary ₹") }, modifier = Modifier.fillMaxWidth()) else OutlinedTextField(dailyRate, { dailyRate = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Daily rate ₹") }, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(overtimeRate, { overtimeRate = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Overtime/hour ₹") }, modifier = Modifier.fillMaxWidth()); OutlinedTextField(effectiveFrom, { effectiveFrom = it }, label = { Text("Effective from yyyy-MM-dd") }, modifier = Modifier.fillMaxWidth()); OutlinedTextField(note, { note = it }, label = { Text("Note") }, modifier = Modifier.fillMaxWidth())
-        if (history.isNotEmpty()) { Text("Salary history", fontWeight = FontWeight.Bold); history.forEach { Text(if (it.payType == "DAILY") "Daily ₹${it.dailyRate}" else "Monthly ₹${it.monthlySalary}") } }; error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-    } }, confirmButton = { Button(enabled = !saving && effectiveFrom.isNotBlank() && (if (payType == "MONTHLY") (monthlySalary.toDoubleOrNull() ?: 0.0) > 0 else (dailyRate.toDoubleOrNull() ?: 0.0) > 0), onClick = { scope.launch { saving = true; try { repository.saveSalaryProfile(SalaryProfileModel(employeeUid = employee.uid, employeeName = employee.name, payType = payType, monthlySalary = if (payType == "MONTHLY") monthlySalary.toDoubleOrNull() ?: 0.0 else 0.0, dailyRate = if (payType == "DAILY") dailyRate.toDoubleOrNull() ?: 0.0 else 0.0, overtimeRatePerHour = overtimeRate.toDoubleOrNull() ?: 0.0, effectiveFrom = effectiveFrom.trim(), note = note.trim())); onDismiss() } catch (e: Exception) { error = e.localizedMessage } finally { saving = false } } }) { Text(if (saving) "Saving..." else "Save Salary") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
+    val repository = remember { SalaryRepository() }
+    val scope = rememberCoroutineScope()
+    val today = remember { SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH).format(Date()) }
+    var payType by remember { mutableStateOf("MONTHLY") }
+    var monthlySalary by remember { mutableStateOf("") }
+    var dailyRate by remember { mutableStateOf("") }
+    var overtimeRate by remember { mutableStateOf("") }
+    var effectiveFrom by remember { mutableStateOf(today) }
+    var note by remember { mutableStateOf("") }
+    var history by remember { mutableStateOf<List<SalaryProfileModel>>(emptyList()) }
+    var saving by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(employee.uid) {
+        try {
+            history = repository.getHistory(employee.uid)
+            history.firstOrNull()?.let { c ->
+                payType = c.payType
+                monthlySalary = if (c.monthlySalary > 0) c.monthlySalary.toString() else ""
+                dailyRate = if (c.dailyRate > 0) c.dailyRate.toString() else ""
+                overtimeRate = if (c.overtimeRatePerHour > 0) c.overtimeRatePerHour.toString() else ""
+            }
+        } catch (e: Exception) { error = e.localizedMessage }
+    }
+
+    AlertDialog(
+        onDismissRequest = { if (!saving) onDismiss() },
+        title = { Text("Salary Settings — ${employee.name}") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { payType = "MONTHLY" }, modifier = Modifier.weight(1f)) { Text("Monthly") }
+                    Button(onClick = { payType = "DAILY" }, modifier = Modifier.weight(1f)) { Text("Daily") }
+                }
+                if (payType == "MONTHLY") OutlinedTextField(monthlySalary, { monthlySalary = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Monthly salary ₹") }, modifier = Modifier.fillMaxWidth())
+                else OutlinedTextField(dailyRate, { dailyRate = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Daily rate ₹") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(overtimeRate, { overtimeRate = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Overtime/hour ₹") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(effectiveFrom, { effectiveFrom = it }, label = { Text("Effective from yyyy-MM-dd") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(note, { note = it }, label = { Text("Note") }, modifier = Modifier.fillMaxWidth())
+                if (history.isNotEmpty()) {
+                    Text("Salary history", fontWeight = FontWeight.Bold)
+                    history.forEach { Text(if (it.payType == "DAILY") "Daily ₹${it.dailyRate}" else "Monthly ₹${it.monthlySalary}") }
+                }
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            }
+        },
+        confirmButton = {
+            Button(
+                enabled = !saving && effectiveFrom.isNotBlank() && (if (payType == "MONTHLY") (monthlySalary.toDoubleOrNull() ?: 0.0) > 0 else (dailyRate.toDoubleOrNull() ?: 0.0) > 0),
+                onClick = {
+                    scope.launch {
+                        saving = true
+                        try {
+                            repository.saveSalaryProfile(
+                                SalaryProfileModel(
+                                    employeeUid = employee.uid,
+                                    employeeName = employee.name,
+                                    payType = payType,
+                                    monthlySalary = if (payType == "MONTHLY") monthlySalary.toDoubleOrNull() ?: 0.0 else 0.0,
+                                    dailyRate = if (payType == "DAILY") dailyRate.toDoubleOrNull() ?: 0.0 else 0.0,
+                                    overtimeRatePerHour = overtimeRate.toDoubleOrNull() ?: 0.0,
+                                    effectiveFrom = effectiveFrom.trim(),
+                                    note = note.trim()
+                                )
+                            )
+                            onDismiss()
+                        } catch (e: Exception) { error = e.localizedMessage }
+                        finally { saving = false }
+                    }
+                }
+            ) { Text(if (saving) "Saving..." else "Save Salary") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
 }
