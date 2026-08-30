@@ -25,7 +25,11 @@ private val permissionModules = listOf(
     "SURVEY" to "Survey Calculator",
     "BILLING" to "Quotation / Billing",
     "CLIENTS" to "Clients",
-    "MARKETING" to "Marketing"
+    "MARKETING" to "Marketing",
+    "LEAVE" to "Leave",
+    "ADVANCE" to "Advance Salary",
+    "SALARY" to "Salary & Payroll",
+    "REPORTS" to "Reports"
 )
 
 fun hasModuleAccess(access: String, module: String): Boolean {
@@ -82,17 +86,11 @@ fun EmployeePermissionsScreen(onBack: () -> Unit = {}) {
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     items(employees, key = { it.uid }) { employee ->
-                        Card(
-                            onClick = { selected = employee },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
+                        Card(onClick = { selected = employee }, modifier = Modifier.fillMaxWidth()) {
                             Column(Modifier.padding(16.dp)) {
                                 Text(employee.name.ifBlank { "Unnamed employee" }, style = MaterialTheme.typography.titleMedium)
                                 Text(employee.department, style = MaterialTheme.typography.bodySmall)
-                                Text(
-                                    if (employee.access.isBlank()) "No module access" else "Access: ${employee.access}",
-                                    style = MaterialTheme.typography.bodySmall
-                                )
+                                Text(if (employee.access.isBlank()) "No module access" else "Access: ${employee.access}", style = MaterialTheme.typography.bodySmall)
                                 Spacer(Modifier.height(6.dp))
                                 Text("EDIT PERMISSIONS", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
                             }
@@ -104,14 +102,7 @@ fun EmployeePermissionsScreen(onBack: () -> Unit = {}) {
     }
 
     selected?.let { employee ->
-        PermissionEditorDialog(
-            employee = employee,
-            onDismiss = { selected = null },
-            onSaved = {
-                selected = null
-                load()
-            }
-        )
+        PermissionEditorDialog(employee = employee, onDismiss = { selected = null }, onSaved = { selected = null; load() })
     }
 }
 
@@ -134,10 +125,8 @@ private fun PermissionEditorDialog(employee: UserProfile, onDismiss: () -> Unit,
                 permissionModules.forEach { (key, label) ->
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                         Checkbox(
-                            checked = selected.contains(key) || selected.contains("ALL"),
-                            onCheckedChange = { checked ->
-                                selected = if (checked) selected + key else selected - key
-                            }
+                            checked = selected.contains(key),
+                            onCheckedChange = { checked -> selected = if (checked) selected + key else selected - key }
                         )
                         Text(label)
                     }
