@@ -1,11 +1,14 @@
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
 const { logger } = require("firebase-functions");
 const { initializeApp } = require("firebase-admin/app");
+const { getAuth } = require("firebase-admin/auth");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
 
 initializeApp();
 const db = getFirestore();
+const adminAuth = getAuth();
 
 async function resolveRecipients(data) {
   const directUid = String(data.recipientUid || "").trim();
@@ -171,4 +174,54 @@ exports.sendShahErpAnnouncement = onDocumentCreated("announcements/{announcement
     announcementId,
     ...result
   });
+});
+
+// Secure server-side employee profile writer. The Android client must already
+// be signed in as an active ADMIN. The Admin SDK performs the write so the
+// client never needs an overly-permissive users rule.
+exports.saveEmployeeProfileAsAdmin = onCall(async (request) => {
+  const callerUid = request.auth?.uid;
+  if (!callerUid) {
+    throw new HttpsError("unauthenticated", "Authentication required");
+  }
+
+  const caller = await db.collection("users").doc(callerUid).get();
+  const callerData = caller.data() || {};
+  if (callerData.active !== true || String(callerData.role || "").toUpperCase() !== "ADMIN") {
+    throw new HttpsError("permission-denied", "Admin authorization required");
+  }
+
+  const data = request.data || {};
+  const uid = String(data.uid || "").trim();
+  const name = String(data.name || "").trim();
+  const email = String(data.email || "").trim();
+  const department = String(data.department || "SURVEY").trim().toUpperCase();
+  const access = String(data.access || "ATTENDANCE,EXPENSES").trim().toUpperCase();
+
+  if (!uid || !name || !email || !email.includes("@")) {
+    throw new HttpsError("invalid-argument", "Employee uid, name and email are required");
+  }
+  if (uid === callerUid) {
+    throw new HttpsError("invalid-argument", "An admin cannot create a profile for their own UID");
+  }
+
+  try {
+    await adminAuth.getUser(uid);
+  } catch (error) {
+    throw new HttpsError("failed-precondition", "Firebase Authentication user does not exist");
+  }
+
+  await db.collection("users").doc(uid).set({
+    uid,
+    name,
+    email,
+    role: "employee",
+    department,
+    access,
+    approved: true,
+    active: true,
+    updatedAt: FieldValue.serverTimestamp()
+  }, { merge: true });
+
+  return { success: true, uid };
 });

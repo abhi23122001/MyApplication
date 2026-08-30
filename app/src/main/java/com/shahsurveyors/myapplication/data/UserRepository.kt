@@ -3,6 +3,7 @@ package com.shahsurveyors.myapplication.data
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import com.google.firebase.functions.FirebaseFunctions
 import com.shahsurveyors.myapplication.models.UserProfile
 import kotlinx.coroutines.tasks.await
 
@@ -11,6 +12,7 @@ class UserRepository(
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()
 ) {
     private val usersCollection = firestore.collection(FirebaseConstants.COLLECTION_USERS)
+    private val functions: FirebaseFunctions = FirebaseFunctions.getInstance()
 
     private fun requireCurrentUid(): String =
         auth.currentUser?.uid?.takeIf { it.isNotBlank() }
@@ -43,26 +45,16 @@ class UserRepository(
             return
         }
 
-        // A different UID is permitted only for an active ADMIN creating an
-        // employee profile. Normal users can never write another user's profile.
+        // Cross-user profile creation is performed by the trusted callable
+        // backend. The backend re-checks that the caller is an active ADMIN.
         requireAdminUid()
-        require(profile.uid.isNotBlank()) { "Employee UID is required" }
-        require(!profile.role.equals(FirebaseConstants.ROLE_ADMIN, ignoreCase = true)) {
-            "Employee profile cannot be created as ADMIN"
-        }
-
-        usersCollection.document(profile.uid).set(
-            profile.copy(
-                role = "employee",
-                approved = true,
-                active = true
-            ),
-            SetOptions.merge()
-        ).await()
+        saveEmployeeProfileAsAdmin(profile)
     }
 
     /**
      * Explicit admin-only helper for creating/updating an employee profile.
+     * The write is delegated to Cloud Functions so Firestore rules do not need
+     * to expose a broad client-side cross-user write permission.
      */
     suspend fun saveEmployeeProfileAsAdmin(profile: UserProfile) {
         requireAdminUid()
@@ -70,14 +62,18 @@ class UserRepository(
         require(!profile.role.equals(FirebaseConstants.ROLE_ADMIN, ignoreCase = true)) {
             "Employee profile cannot be created as ADMIN"
         }
-        usersCollection.document(profile.uid).set(
-            profile.copy(
-                role = "employee",
-                approved = true,
-                active = true
-            ),
-            SetOptions.merge()
-        ).await()
+
+        val data = hashMapOf<String, Any>(
+            "uid" to profile.uid,
+            "name" to profile.name,
+            "email" to profile.email,
+            "department" to profile.department,
+            "access" to profile.access
+        )
+
+        functions.getHttpsCallable("saveEmployeeProfileAsAdmin")
+            .call(data)
+            .await()
     }
 
     suspend fun getAllEmployees(): List<UserProfile> {
