@@ -180,21 +180,44 @@ class AttendanceViewModel(
                     }
                 }
 
-                // 7. WEBHOOK SYNC
+                // 7. WEBHOOK SYNC TO GOOGLE SHEETS
                 withContext(Dispatchers.IO) {
                     try {
-                        RetrofitClient.api.handleAction(
-                            mapOf(
-                                "action" to action,
-                                "staffName" to staffName,
-                                "workArea" to workArea,
-                                "lat" to location.first.toString(),
-                                "lng" to location.second.toString(),
-                                "image" to base64Image
-                            )
+                        val empId = auth.currentUser?.uid?.take(8)?.uppercase() ?: "EMP001"
+                        val payload = mapOf<String, Any>(
+                            "action" to "ATTENDANCE_PUNCH",
+                            "punchType" to action,
+                            "type" to action,
+                            "staffName" to staffName,
+                            "name" to staffName,
+                            "EmployeeName" to staffName,
+                            "EmployeeID" to empId,
+                            "empId" to empId,
+                            "workArea" to workArea,
+                            "date" to todayDate,
+                            "time" to currentTime,
+                            "lat" to location.first.toString(),
+                            "lng" to location.second.toString(),
+                            "Latitude" to location.first.toString(),
+                            "Longitude" to location.second.toString(),
+                            "image" to base64Image
                         )
+                        RetrofitClient.api.handleAction(payload)
                     } catch (e: Exception) {
-                        e.printStackTrace()
+                        try {
+                            RetrofitClient.api.handleAction(
+                                mapOf<String, Any>(
+                                    "action" to action,
+                                    "staffName" to staffName,
+                                    "workArea" to workArea,
+                                    "lat" to location.first.toString(),
+                                    "lng" to location.second.toString(),
+                                    "image" to base64Image
+                                )
+                            )
+                        } catch (e2: Exception) {
+                            e2.printStackTrace()
+                        }
                     }
                 }
 

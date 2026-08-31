@@ -1,9 +1,9 @@
 package com.shahsurveyors.myapplication.data
 
 import com.shahsurveyors.myapplication.network.RetrofitClient
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 class AppRepository {
@@ -17,23 +17,27 @@ class AppRepository {
     suspend fun refreshAllSyncData() = withContext(Dispatchers.IO) {
         _isSyncing.value = true
         try {
-            val response = RetrofitClient.api.handleAction(mapOf("action" to "FETCH_ALL_SYNC_DATA"))
-            if (response.status == "SUCCESS") {
-                _syncData.value = response.data as? Map<String, Any>
-            }
+            val response = RetrofitClient.api.fetchData("FETCH_ALL_SYNC_DATA")
+            _syncData.value = response
         } catch (e: Exception) {
-            e.printStackTrace()
+            try {
+                val response = RetrofitClient.api.handleAction(mapOf("action" to "FETCH_ALL_SYNC_DATA"))
+                _syncData.value = response
+            } catch (e2: Exception) {
+                e2.printStackTrace()
+            }
         } finally {
             _isSyncing.value = false
         }
     }
 
-    suspend fun postEnterpriseAction(action: String, params: Map<String, String>): Boolean = withContext(Dispatchers.IO) {
+    suspend fun postEnterpriseAction(action: String, params: Map<String, Any>): Boolean = withContext(Dispatchers.IO) {
         _isSyncing.value = true
         try {
             val payload = params.toMutableMap().apply { put("action", action) }
             val response = RetrofitClient.api.handleAction(payload)
-            if (response.status == "SUCCESS") {
+            val status = (response["status"] as? String)?.uppercase() ?: ""
+            if (status == "SUCCESS" || status == "OK" || response.isNotEmpty()) {
                 refreshAllSyncData()
                 return@withContext true
             }

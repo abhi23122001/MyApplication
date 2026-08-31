@@ -11,46 +11,26 @@ object RetrofitClient {
     private const val BASE_URL =
         "https://script.google.com/macros/s/AKfycbyvyVeBGYxs2U8-X9QoFK19e5ahe6VIa2hUxtYuml60X60BbczOMgYTJ38Pctvf_sQAqw/"
 
-    /**
-     * HTTP logging is disabled.
-     *
-     * This prevents sensitive request/response data from
-     * appearing in Android Studio Logcat.
-     */
     private val loggingInterceptor =
         HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.NONE
+            level = HttpLoggingInterceptor.Level.BASIC
         }
 
-    /**
-     * OkHttp client configuration.
-     */
     private val client: OkHttpClient =
         OkHttpClient.Builder()
             .addInterceptor(loggingInterceptor)
-            .connectTimeout(
-                60,
-                TimeUnit.SECONDS
-            )
-            .readTimeout(
-                60,
-                TimeUnit.SECONDS
-            )
-            .writeTimeout(
-                60,
-                TimeUnit.SECONDS
-            )
+            .followRedirects(true)
+            .followSslRedirects(true)
+            .retryOnConnectionFailure(true)
+            .connectTimeout(60, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .writeTimeout(60, TimeUnit.SECONDS)
             .build()
 
-    /**
-     * Retrofit API client.
-     */
     val api: WebhookApi =
         Retrofit.Builder()
             .baseUrl(BASE_URL)
-            .addConverterFactory(
-                GsonConverterFactory.create()
-            )
+            .addConverterFactory(GsonConverterFactory.create())
             .client(client)
             .build()
             .create(WebhookApi::class.java)

@@ -253,29 +253,13 @@ class BillingViewModel(
                 // RESPONSE
                 // ---------------------------------------------
 
-                if (
-                    response.status
-                        ?.equals(
-                            "SUCCESS",
-                            ignoreCase = true
-                        ) == true
-                ) {
+                val status = response["status"]?.toString() ?: ""
+                val msg = response["message"]?.toString() ?: ""
 
-                    statusMessage =
-                        response.message
-                            ?.ifBlank {
-                                "PDF uploaded successfully."
-                            }
-                            ?: "PDF uploaded successfully."
-
+                if (status.equals("SUCCESS", ignoreCase = true) || status.equals("OK", ignoreCase = true) || response.isNotEmpty()) {
+                    statusMessage = msg.ifBlank { "PDF uploaded successfully." }
                 } else {
-
-                    statusMessage =
-                        response.message
-                            ?.ifBlank {
-                                "PDF upload failed."
-                            }
-                            ?: "PDF upload failed."
+                    statusMessage = msg.ifBlank { "PDF upload failed." }
                 }
 
             } catch (e: Exception) {

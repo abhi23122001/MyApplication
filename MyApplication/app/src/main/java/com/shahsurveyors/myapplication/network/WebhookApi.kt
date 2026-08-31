@@ -1,65 +1,37 @@
 package com.shahsurveyors.myapplication.network
 
+import com.google.gson.JsonObject
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Query
 
 /**
- * API interface for the current Google Apps Script backend.
- *
- * NOTE:
- * This is the existing backend layer.
- * Later, when Firebase migration is completed,
- * these API calls can be replaced with Firebase services.
+ * API interface for the Google Apps Script Webhook / Google Sheets backend.
  */
 interface WebhookApi {
 
-    /**
-     * Sends an action/request to Google Apps Script.
-     *
-     * Example:
-     * {
-     *     "action": "VERIFY_USER_LOGIN",
-     *     "phone": "XXXXXXXXXX",
-     *     "password": "********"
-     * }
-     */
     @POST("exec")
     suspend fun handleAction(
-        @Body payload: Map<String, String>
-    ): ApiResponse
+        @Body payload: Map<String, Any>
+    ): Map<String, Any>
 
-
-    /**
-     * Fetches data from Google Apps Script using GET.
-     *
-     * Example:
-     * ?action=FETCH_ALL_SYNC_DATA
-     */
     @GET("exec")
     suspend fun fetchData(
         @Query("action") action: String
-    ): ApiResponse
+    ): Map<String, Any>
+
+    @GET("exec")
+    suspend fun fetchRawJson(
+        @Query("action") action: String
+    ): JsonObject
 }
 
-
 /**
- * Standard response returned by the current backend.
- *
- * data is kept as Any? because different actions can return
- * different structures such as:
- *
- * - Map
- * - List
- * - String
- * - null
+ * Standard response structure helper.
  */
 data class ApiResponse(
-
     val status: String? = null,
-
     val message: String? = null,
-
     val data: Any? = null
 )
