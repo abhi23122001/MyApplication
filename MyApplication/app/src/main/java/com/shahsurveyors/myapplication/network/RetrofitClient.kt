@@ -9,7 +9,7 @@ import java.util.concurrent.TimeUnit
 object RetrofitClient {
 
     private const val BASE_URL =
-        "https://script.google.com/macros/s/AKfycbyvyVeBGYxs2U8-X9QoFK19e5ahe6VIa2hUxtYuml60X60BbczOMgYTJ38Pctvf_sQAqw/"
+        "https://script.google.com/macros/s/AKfycbxIkez5x0tAb7eSp2FgWBn43u-RKlz6Z997IHR7DtyqnblfIBOWBpeXRkSs1r8m6tfK/"
 
     private val loggingInterceptor =
         HttpLoggingInterceptor().apply {
