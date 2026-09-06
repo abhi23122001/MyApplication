@@ -266,6 +266,7 @@ class SalaryRepository(
                 val role = userDoc.getString("role") ?: "STAFF"
                 val phone = userDoc.getString("phone") ?: ""
                 val email = userDoc.getString("email") ?: ""
+                val photoUrl = userDoc.getString("photoUrl") ?: userDoc.getString("dpUrl") ?: ""
                 val active = userDoc.getBoolean("active") ?: true
                 val monthlySalaryFallback = userDoc.getDouble("monthlySalary")
                     ?: userDoc.getDouble("salary")
@@ -405,6 +406,7 @@ class SalaryRepository(
                     role = role,
                     phone = phone,
                     email = email,
+                    photoUrl = photoUrl,
                     active = active,
                     month = yearMonth,
                     presentDaysCount = presentCount,

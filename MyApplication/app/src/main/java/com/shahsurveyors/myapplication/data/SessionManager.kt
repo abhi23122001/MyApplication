@@ -36,6 +36,12 @@ class SessionManager(
 
         val USER_ACCESS =
             stringPreferencesKey("user_access")
+
+        val USER_EMP_ID =
+            stringPreferencesKey("user_emp_id")
+
+        val USER_PHOTO_URL =
+            stringPreferencesKey("user_photo_url")
     }
 
 
@@ -49,7 +55,9 @@ class SessionManager(
         name: String,
         role: String,
         dept: String,
-        access: String
+        access: String,
+        empId: String = "",
+        photoUrl: String = ""
     ) {
 
         context.dataStore.edit { preferences ->
@@ -71,6 +79,20 @@ class SessionManager(
 
             preferences[USER_ACCESS] =
                 access.trim()
+
+            if (empId.isNotBlank()) {
+                preferences[USER_EMP_ID] = empId.trim()
+            }
+
+            if (photoUrl.isNotBlank()) {
+                preferences[USER_PHOTO_URL] = photoUrl.trim()
+            }
+        }
+    }
+
+    suspend fun updatePhotoUrl(photoUrl: String) {
+        context.dataStore.edit { preferences ->
+            preferences[USER_PHOTO_URL] = photoUrl.trim()
         }
     }
 
@@ -100,7 +122,13 @@ class SessionManager(
                         preferences[USER_DEPT],
 
                 "access" to
-                        preferences[USER_ACCESS]
+                        preferences[USER_ACCESS],
+
+                "empId" to
+                        preferences[USER_EMP_ID],
+
+                "photoUrl" to
+                        preferences[USER_PHOTO_URL]
             )
         }
 

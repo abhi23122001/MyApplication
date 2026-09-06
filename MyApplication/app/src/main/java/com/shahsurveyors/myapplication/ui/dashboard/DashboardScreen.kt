@@ -1,8 +1,14 @@
 package com.shahsurveyors.myapplication.ui.dashboard
 
+import android.net.Uri
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -23,11 +29,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
 import com.shahsurveyors.myapplication.R
 import com.shahsurveyors.myapplication.ui.theme.*
 import kotlinx.coroutines.delay
@@ -41,8 +50,12 @@ import java.util.TimeZone
 fun DashboardScreen(
     currentUid: String = "",
     userName: String = "User",
+    userEmail: String = "",
     userRole: String = "Staff",
     userAccess: String = "ALL",
+    userDepartment: String = "",
+    userEmployeeId: String = "",
+    userPhotoUrl: String? = null,
 
     onNavigateToAttendance: () -> Unit,
     onNavigateToEquipment: () -> Unit,
@@ -56,14 +69,19 @@ fun DashboardScreen(
     onNavigateToClients: () -> Unit,
     onNavigateToSalary: () -> Unit = {},
 
+    onUploadProfilePicture: ((Uri, (Boolean, String?) -> Unit) -> Unit)? = null,
+    onLogout: (() -> Unit)? = null,
+
     isAdmin: Boolean = false,
     isSyncing: Boolean = false,
     onRefresh: () -> Unit = {},
     viewModel: DashboardViewModel = viewModel()
 ) {
+    val context = LocalContext.current
     var currentTime by remember { mutableStateOf("") }
     var currentDate by remember { mutableStateOf("") }
     var showNotificationDialog by remember { mutableStateOf(false) }
+    var showProfileDialog by remember { mutableStateOf(false) }
 
     val pullToRefreshState = rememberPullToRefreshState()
 
@@ -134,15 +152,32 @@ fun DashboardScreen(
 
                     Spacer(Modifier.width(8.dp))
 
-                    Image(
-                        painter = painterResource(id = R.drawable.app_logo),
-                        contentDescription = "Profile",
+                    // Profile Picture Avatar / Button
+                    Box(
                         modifier = Modifier
-                            .size(32.dp)
+                            .size(36.dp)
                             .clip(CircleShape)
-                            .background(ShahWhite),
-                        contentScale = ContentScale.Inside
-                    )
+                            .background(ShahWhite)
+                            .border(1.5.dp, ShahLightGreen, CircleShape)
+                            .clickable { showProfileDialog = true },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (!userPhotoUrl.isNullOrBlank()) {
+                            AsyncImage(
+                                model = userPhotoUrl,
+                                contentDescription = "Profile DP",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            Text(
+                                text = userName.take(1).uppercase().ifBlank { "U" },
+                                color = ShahDarkGreen,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp
+                            )
+                        }
+                    }
 
                     Spacer(Modifier.width(16.dp))
                 },
@@ -240,6 +275,11 @@ fun DashboardScreen(
                         onBilling = onNavigateToBilling,
                         onTasks = onNavigateToTasks,
                         onSalary = onNavigateToSalary,
+                        onSurvey = onNavigateToSurvey,
+                        onDsr = onNavigateToDsr,
+                        onClients = onNavigateToClients,
+                        onEquipment = onNavigateToEquipment,
+                        userAccess = userAccess,
                         isAdmin = isAdmin
                     )
 
@@ -260,6 +300,30 @@ fun DashboardScreen(
         NotificationCenterDialog(
             notifications = viewModel.notificationList,
             onDismiss = { showNotificationDialog = false }
+        )
+    }
+
+    if (showProfileDialog) {
+        UserProfileDialog(
+            name = userName,
+            email = userEmail,
+            role = userRole,
+            empId = userEmployeeId,
+            department = userDepartment,
+            access = userAccess,
+            photoUrl = userPhotoUrl,
+            isAdmin = isAdmin,
+            onDismiss = { showProfileDialog = false },
+            onUploadPhoto = { uri ->
+                onUploadProfilePicture?.invoke(uri) { success, msg ->
+                    if (success) {
+                        Toast.makeText(context, "Profile picture updated successfully!", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(context, "Upload failed: $msg", Toast.LENGTH_LONG).show()
+                    }
+                }
+            },
+            onLogout = onLogout
         )
     }
 }
@@ -389,46 +453,286 @@ fun QuickActionsGrid(
     onBilling: () -> Unit,
     onTasks: () -> Unit,
     onSalary: () -> Unit,
-    isAdmin: Boolean
+    onSurvey: () -> Unit = {},
+    onDsr: () -> Unit = {},
+    onClients: () -> Unit = {},
+    onEquipment: () -> Unit = {},
+    userAccess: String = "ALL",
+    isAdmin: Boolean = false
 ) {
-    val actions = buildList {
-        add(QuickAction("Punch IN/OUT", onAttendance))
-        add(QuickAction("My Tasks", onTasks))
-        add(QuickAction("Salary / Slip", onSalary))
+    val accessUpper = userAccess.uppercase()
+    val hasFullAccess = isAdmin || accessUpper.contains("ALL")
 
-        if (isAdmin) {
-            add(QuickAction("Payroll Management", onSalary))
-            add(QuickAction("Staff & Salary Settings", onAdmin))
-            add(QuickAction("Create Quote / Invoice", onBilling))
-        } else {
+    val actions = buildList {
+        if (hasFullAccess || accessUpper.contains("ATTENDANCE")) {
+            add(QuickAction("Punch IN/OUT", onAttendance))
+        }
+        if (hasFullAccess || accessUpper.contains("TASK")) {
+            add(QuickAction("My Tasks", onTasks))
+        }
+        if (hasFullAccess || accessUpper.contains("SALARY")) {
+            add(QuickAction(if (isAdmin) "Payroll Hub" else "Salary / Slip", onSalary))
+        }
+        if (hasFullAccess || accessUpper.contains("EXPENSE")) {
             add(QuickAction("Claim Expense", onExpense))
+        }
+        if (hasFullAccess || accessUpper.contains("SURVEY")) {
+            add(QuickAction("Survey Engine", onSurvey))
+        }
+        if (hasFullAccess || accessUpper.contains("DSR")) {
+            add(QuickAction("Daily Status (DSR)", onDsr))
+        }
+        if (hasFullAccess || accessUpper.contains("CRM")) {
+            add(QuickAction("Clients CRM", onClients))
+        }
+        if (isAdmin) {
+            add(QuickAction("Staff & Settings", onAdmin))
+            add(QuickAction("Create Invoice", onBilling))
+            add(QuickAction("Equipment Tracker", onEquipment))
         }
     }
 
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(2),
-        modifier = Modifier.height(if (actions.size <= 2) 80.dp else if (actions.size <= 4) 150.dp else 220.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        items(actions) { action ->
-            Button(
-                onClick = action.action,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = ShahWhite,
-                    contentColor = ShahGreen
-                ),
-                border = BorderStroke(1.dp, ShahGreen.copy(alpha = 0.3f))
-            ) {
-                Text(
-                    text = action.title,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 12.sp
-                )
+    val rows = (actions.size + 1) / 2
+    val gridHeight = when {
+        rows == 0 -> 0.dp
+        rows == 1 -> 65.dp
+        rows == 2 -> 130.dp
+        rows == 3 -> 195.dp
+        else -> 260.dp
+    }
+
+    if (actions.isNotEmpty()) {
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
+            modifier = Modifier.height(gridHeight),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            userScrollEnabled = false
+        ) {
+            items(actions) { action ->
+                Button(
+                    onClick = action.action,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ShahWhite,
+                        contentColor = ShahDarkGreen
+                    ),
+                    border = BorderStroke(1.dp, ShahGreen.copy(alpha = 0.3f)),
+                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 1.dp)
+                ) {
+                    Text(
+                        text = action.title,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 12.sp,
+                        maxLines = 1
+                    )
+                }
             }
         }
+    }
+}
+
+@Composable
+fun UserProfileDialog(
+    name: String,
+    email: String,
+    role: String,
+    empId: String,
+    department: String,
+    access: String,
+    photoUrl: String?,
+    isAdmin: Boolean,
+    onDismiss: () -> Unit,
+    onUploadPhoto: (Uri) -> Unit,
+    onLogout: (() -> Unit)? = null
+) {
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            onUploadPhoto(uri)
+        }
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth(0.92f)
+                .wrapContentHeight(),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = ShahWhite)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Top Header with Close
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "My Profile & Account",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = ShahDarkGreen
+                    )
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(24.dp)) {
+                        Icon(Icons.Default.Close, contentDescription = "Close", tint = ShahDarkGrey)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Profile DP with Camera Badge
+                Box(
+                    modifier = Modifier
+                        .size(90.dp)
+                        .clip(CircleShape)
+                        .background(ShahGreen.copy(alpha = 0.1f))
+                        .border(2.5.dp, ShahGreen, CircleShape)
+                        .clickable { launcher.launch("image/*") },
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (!photoUrl.isNullOrBlank()) {
+                        AsyncImage(
+                            model = photoUrl,
+                            contentDescription = "User Avatar",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Text(
+                            text = name.take(1).uppercase().ifBlank { "U" },
+                            fontSize = 32.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = ShahDarkGreen
+                        )
+                    }
+
+                    // Camera Icon Overlay at Bottom
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(ShahDarkGreen)
+                            .border(1.5.dp, ShahWhite, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CameraAlt,
+                            contentDescription = "Upload Photo",
+                            tint = ShahWhite,
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                TextButton(
+                    onClick = { launcher.launch("image/*") }
+                ) {
+                    Icon(Icons.Default.Upload, contentDescription = null, modifier = Modifier.size(16.dp), tint = ShahGreen)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Change Profile Picture", fontSize = 12.sp, color = ShahGreen, fontWeight = FontWeight.Bold)
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // User Info Details Card
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = ShahGrey)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        ProfileInfoRow(label = "Full Name", value = name)
+                        ProfileInfoRow(label = "Employee ID", value = empId.ifBlank { "EMP001" })
+                        ProfileInfoRow(label = "Department", value = department.ifBlank { "SURVEY" })
+                        ProfileInfoRow(label = "Designation / Role", value = role.uppercase())
+                        if (email.isNotBlank()) {
+                            ProfileInfoRow(label = "Email", value = email)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Assigned Permissions List
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "Assigned Modules & Permissions:",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = ShahDarkGrey
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    val permissionList = if (access.contains("ALL", ignoreCase = true) || isAdmin) {
+                        listOf("FULL ACCESS (ALL MODULES)")
+                    } else {
+                        access.split(",").map { it.trim() }.filter { it.isNotBlank() }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        permissionList.take(4).forEach { perm ->
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = ShahLightGreen.copy(alpha = 0.25f)
+                            ) {
+                                Text(
+                                    text = perm,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = ShahDarkGreen,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if (onLogout != null) {
+                    Spacer(modifier = Modifier.height(20.dp))
+                    OutlinedButton(
+                        onClick = {
+                            onDismiss()
+                            onLogout()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = ErrorRed),
+                        border = BorderStroke(1.dp, ErrorRed.copy(alpha = 0.5f))
+                    ) {
+                        Icon(Icons.Default.Logout, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Sign Out", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileInfoRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(text = label, fontSize = 12.sp, color = ShahMediumGrey)
+        Text(text = value, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ShahBlack)
     }
 }
 

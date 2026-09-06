@@ -177,6 +177,7 @@ data class Employee360Report(
     val role: String = "",
     val phone: String = "",
     val email: String = "",
+    val photoUrl: String = "",
     val active: Boolean = true,
     val month: String = "", // YYYY-MM
 

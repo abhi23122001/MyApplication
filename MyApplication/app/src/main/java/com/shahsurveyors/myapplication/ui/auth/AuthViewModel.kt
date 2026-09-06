@@ -1,5 +1,7 @@
 package com.shahsurveyors.myapplication.ui.auth
 
+import android.content.Context
+import android.net.Uri
 import android.util.Patterns
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -9,6 +11,7 @@ import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import com.google.firebase.storage.FirebaseStorage
 import com.shahsurveyors.myapplication.data.SessionManager
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -33,9 +36,11 @@ class AuthViewModel(
     var userUid by mutableStateOf("")
     var userEmployeeId by mutableStateOf("EMP001")
     var userName by mutableStateOf("")
+    var userEmail by mutableStateOf("")
     var userRole by mutableStateOf("")
     var userAccess by mutableStateOf("")
     var userDepartment by mutableStateOf("")
+    var userPhotoUrl by mutableStateOf<String?>(null)
 
 
     // =========================================================
@@ -61,10 +66,12 @@ class AuthViewModel(
                     if (!uid.isNullOrBlank()) {
                         userUid = uid
                         userName = session["name"] ?: ""
+                        userEmail = session["email"] ?: ""
                         userRole = session["role"] ?: ""
                         userAccess = session["access"] ?: ""
                         userDepartment = session["dept"] ?: ""
                         userEmployeeId = session["empId"] ?: uid.take(6).uppercase()
+                        userPhotoUrl = session["photoUrl"]
 
                         isUserLoggedIn = true
                         userStatus = "APPROVED"
@@ -248,8 +255,13 @@ class AuthViewModel(
             ?: document.getString("id")
             ?: uid.take(6).uppercase()
 
+        val photoUrl = document.getString("photoUrl")
+            ?: document.getString("dpUrl")
+            ?: document.getString("profilePicture")
+
         userUid = uid
         userEmployeeId = empId
+        userPhotoUrl = photoUrl
 
 
         // =====================================================
@@ -301,7 +313,9 @@ class AuthViewModel(
                     "ALL"
                 } else {
                     access
-                }
+                },
+                empId = empId,
+                photoUrl = photoUrl ?: ""
             )
 
             return
@@ -337,7 +351,9 @@ class AuthViewModel(
             name = name,
             role = role,
             department = department,
-            access = access
+            access = access,
+            empId = empId,
+            photoUrl = photoUrl ?: ""
         )
     }
 
@@ -352,7 +368,9 @@ class AuthViewModel(
         name: String,
         role: String,
         department: String,
-        access: String
+        access: String,
+        empId: String = "",
+        photoUrl: String = ""
     ) {
 
         sessionManager.saveSession(
@@ -361,13 +379,18 @@ class AuthViewModel(
             name = name,
             role = role,
             dept = department,
-            access = access
+            access = access,
+            empId = empId,
+            photoUrl = photoUrl
         )
 
         userName = name
+        userEmail = email
         userRole = role
         userAccess = access
         userDepartment = department
+        userEmployeeId = empId.ifBlank { uid.take(6).uppercase() }
+        userPhotoUrl = photoUrl.ifBlank { null }
 
         userStatus = "APPROVED"
         isUserLoggedIn = true
@@ -537,13 +560,67 @@ class AuthViewModel(
                 sessionManager.clearSession()
 
                 userName = ""
+                userEmail = ""
                 userRole = ""
                 userAccess = ""
                 userDepartment = ""
+                userPhotoUrl = null
 
                 userStatus = "PENDING"
                 isUserLoggedIn = false
                 authError = null
+            }
+        }
+    }
+
+
+    // =========================================================
+    // PROFILE PICTURE (DP) UPLOAD & UPDATE
+    // =========================================================
+
+    fun uploadProfilePicture(
+        uri: Uri,
+        context: Context,
+        onComplete: (Boolean, String?) -> Unit
+    ) {
+        val uid = userUid.ifBlank { firebaseAuth.currentUser?.uid ?: "" }
+        if (uid.isBlank()) {
+            onComplete(false, "User session not active.")
+            return
+        }
+
+        viewModelScope.launch {
+            isLoading = true
+            try {
+                val storageRef = FirebaseStorage.getInstance().reference
+                    .child("profile_pictures/${uid}.jpg")
+
+                storageRef.putFile(uri).await()
+                val downloadUrl = storageRef.downloadUrl.await().toString()
+
+                // 1. Update Firestore Profile
+                firestore.collection("users").document(uid)
+                    .set(
+                        mapOf(
+                            "photoUrl" to downloadUrl,
+                            "updatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+                        ),
+                        SetOptions.merge()
+                    )
+                    .await()
+
+                // 2. Update DataStore Session
+                sessionManager.updatePhotoUrl(downloadUrl)
+
+                // 3. Update Live ViewModel State
+                userPhotoUrl = downloadUrl
+
+                onComplete(true, downloadUrl)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                onComplete(false, e.localizedMessage ?: "Failed to upload profile picture.")
+            } finally {
+                isLoading = false
             }
         }
     }

@@ -10,6 +10,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -63,14 +65,31 @@ fun Employee360DetailDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(ShahDarkGreen),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Default.Person, contentDescription = null, tint = ShahWhite)
+                        if (!report?.photoUrl.isNullOrBlank()) {
+                            AsyncImage(
+                                model = report?.photoUrl,
+                                contentDescription = report?.name,
+                                modifier = Modifier
+                                    .size(46.dp)
+                                    .clip(CircleShape)
+                                    .border(2.dp, ShahGreen, CircleShape),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .size(46.dp)
+                                    .clip(CircleShape)
+                                    .background(ShahDarkGreen),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = (report?.name?.take(1) ?: "U").uppercase(),
+                                    color = ShahWhite,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 18.sp
+                                )
+                            }
                         }
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {

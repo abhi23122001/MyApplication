@@ -58,49 +58,55 @@ fun MoreModulesScreen(
             // 1. HR & SALARY (Filtered)
             // ====================================================
             val permittedPeople = buildList {
-                if (hasFullAccess) {
+                if (isAdmin) {
                     add(
                         ModuleData(
-                            name = "Employee & Salary Settings",
-                            description = "Configure staff salaries and permissions",
+                            name = "Employee & Staff Management",
+                            description = "Staff approvals, salary rates & permissions",
                             icon = Icons.Default.Groups,
                             route = "employees"
                         )
                     )
                     add(
                         ModuleData(
-                            name = "Payroll & Salary Slips",
-                            description = "Calculate payroll and export slips",
+                            name = "Payroll Management",
+                            description = "Full staff monthly attendance & salary calculations",
                             icon = Icons.Default.Payments,
                             route = "salary"
                         )
                     )
-                } else {
+                } else if (hasFullAccess || accessUpper.contains("SALARY")) {
                     add(
                         ModuleData(
                             name = "My Salary & Payslip",
-                            description = "View net salary, EMIs and download slip",
+                            description = "View net salary, EMI balance and download slip",
                             icon = Icons.Default.Payments,
                             route = "salary"
                         )
                     )
                 }
-                add(
-                    ModuleData(
-                        name = "Attendance Punch",
-                        description = "GPS & Selfie attendance logs",
-                        icon = Icons.Default.PunchClock,
-                        route = "attendance"
+
+                if (hasFullAccess || accessUpper.contains("ATTENDANCE")) {
+                    add(
+                        ModuleData(
+                            name = "Attendance Punch",
+                            description = "GPS & Selfie attendance logs",
+                            icon = Icons.Default.PunchClock,
+                            route = "attendance"
+                        )
                     )
-                )
-                add(
-                    ModuleData(
-                        name = if (hasFullAccess) "Leave Approvals & History" else "My Leave Applications",
-                        description = "Apply for leave and track approvals",
-                        icon = Icons.Default.EventBusy,
-                        route = "leave"
+                }
+
+                if (hasFullAccess || accessUpper.contains("LEAVE") || accessUpper.contains("ATTENDANCE")) {
+                    add(
+                        ModuleData(
+                            name = if (isAdmin) "Leave Approvals & History" else "My Leave Applications",
+                            description = "Apply for leave and track approvals",
+                            icon = Icons.Default.EventBusy,
+                            route = "leave"
+                        )
                     )
-                )
+                }
             }
 
             if (permittedPeople.isNotEmpty()) {
@@ -117,14 +123,16 @@ fun MoreModulesScreen(
             // 2. PROJECT & FIELD SURVEY (Filtered)
             // ====================================================
             val permittedSurvey = buildList {
-                add(
-                    ModuleData(
-                        name = "My Assigned Tasks",
-                        description = "Project tasks and progress update",
-                        icon = Icons.Default.Assignment,
-                        route = "tasks"
+                if (hasFullAccess || accessUpper.contains("TASK")) {
+                    add(
+                        ModuleData(
+                            name = "My Assigned Tasks",
+                            description = "Project tasks and progress update",
+                            icon = Icons.Default.Assignment,
+                            route = "tasks"
+                        )
                     )
-                )
+                }
                 if (hasFullAccess || accessUpper.contains("SURVEY")) {
                     add(
                         ModuleData(
@@ -135,7 +143,7 @@ fun MoreModulesScreen(
                         )
                     )
                 }
-                if (hasFullAccess) {
+                if (isAdmin || accessUpper.contains("EQUIPMENT")) {
                     add(
                         ModuleData(
                             name = "Equipment Tracker",
@@ -181,7 +189,7 @@ fun MoreModulesScreen(
                         )
                     )
                 }
-                if (hasFullAccess || accessUpper.contains("BILLING")) {
+                if (isAdmin || accessUpper.contains("BILLING")) {
                     add(
                         ModuleData(
                             name = "Billing & GST Invoices",
@@ -217,14 +225,16 @@ fun MoreModulesScreen(
                         )
                     )
                 }
-                add(
-                    ModuleData(
-                        name = "Live Team Radar & Chat",
-                        description = "Internal team communication",
-                        icon = Icons.Default.Chat,
-                        route = "chat"
+                if (hasFullAccess || accessUpper.contains("CHAT")) {
+                    add(
+                        ModuleData(
+                            name = "Live Team Radar & Chat",
+                            description = "Internal team communication",
+                            icon = Icons.Default.Chat,
+                            route = "chat"
+                        )
                     )
-                )
+                }
             }
 
             if (permittedBusiness.isNotEmpty()) {

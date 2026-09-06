@@ -27,6 +27,9 @@ import com.shahsurveyors.myapplication.models.SalaryProfileModel
 import com.shahsurveyors.myapplication.ui.theme.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.border
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -40,6 +43,7 @@ data class EmployeeItem(
     val access: String = "ATTENDANCE,CHAT",
     val phone: String = "",
     val email: String = "",
+    val photoUrl: String = "",
     val active: Boolean = true
 )
 
@@ -81,6 +85,7 @@ fun EmployeeManagementScreen(
                     val access = doc.getString("access") ?: "ATTENDANCE,CHAT"
                     val phone = doc.getString("phone") ?: ""
                     val email = doc.getString("email") ?: ""
+                    val photoUrl = doc.getString("photoUrl") ?: doc.getString("dpUrl") ?: ""
                     val active = doc.getBoolean("active") ?: true
 
                     employeeList.add(
@@ -93,6 +98,7 @@ fun EmployeeManagementScreen(
                             access = access,
                             phone = phone,
                             email = email,
+                            photoUrl = photoUrl,
                             active = active
                         )
                     )
@@ -259,19 +265,31 @@ fun EmployeeManagementScreen(
                                     .padding(16.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Surface(
-                                    modifier = Modifier
-                                        .size(48.dp)
-                                        .clip(CircleShape),
-                                    color = ShahGreen.copy(alpha = 0.12f)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Text(
-                                            text = employee.name.trim().firstOrNull()?.uppercase() ?: "?",
-                                            fontWeight = FontWeight.Bold,
-                                            color = ShahGreen,
-                                            fontSize = 20.sp
-                                        )
+                                if (employee.photoUrl.isNotBlank()) {
+                                    AsyncImage(
+                                        model = employee.photoUrl,
+                                        contentDescription = employee.name,
+                                        modifier = Modifier
+                                            .size(48.dp)
+                                            .clip(CircleShape)
+                                            .border(1.5.dp, ShahGreen, CircleShape),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                } else {
+                                    Surface(
+                                        modifier = Modifier
+                                            .size(48.dp)
+                                            .clip(CircleShape),
+                                        color = ShahGreen.copy(alpha = 0.12f)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Text(
+                                                text = employee.name.trim().firstOrNull()?.uppercase() ?: "?",
+                                                fontWeight = FontWeight.Bold,
+                                                color = ShahGreen,
+                                                fontSize = 20.sp
+                                            )
+                                        }
                                     }
                                 }
 

@@ -156,8 +156,12 @@ class MainActivity : ComponentActivity() {
                                 DashboardScreen(
                                     currentUid = authViewModel.userUid,
                                     userName = authViewModel.userName,
+                                    userEmail = authViewModel.userEmail,
                                     userRole = authViewModel.userRole,
                                     userAccess = authViewModel.userAccess,
+                                    userDepartment = authViewModel.userDepartment,
+                                    userEmployeeId = authViewModel.userEmployeeId,
+                                    userPhotoUrl = authViewModel.userPhotoUrl,
                                     onNavigateToAttendance = { navController.navigate("attendance") },
                                     onNavigateToEquipment = { navController.navigate("equipment") },
                                     onNavigateToTasks = { navController.navigate("tasks") },
@@ -168,13 +172,22 @@ class MainActivity : ComponentActivity() {
                                         else navController.navigate("tasks")
                                     },
                                     onNavigateToBilling = {
-                                        if (isAdmin || authViewModel.userAccess.contains("BILLING")) navController.navigate("billing")
+                                        if (isAdmin || authViewModel.userAccess.contains("BILLING", ignoreCase = true)) navController.navigate("billing")
                                         else navController.navigate("salary")
                                     },
                                     onNavigateToExpense = { navController.navigate("expense") },
                                     onNavigateToDsr = { navController.navigate("dsr") },
                                     onNavigateToClients = { navController.navigate("clients") },
                                     onNavigateToSalary = { navController.navigate("salary") },
+                                    onUploadProfilePicture = { uri, callback ->
+                                        authViewModel.uploadProfilePicture(uri, context, callback)
+                                    },
+                                    onLogout = {
+                                        authViewModel.logout()
+                                        navController.navigate("login") {
+                                            popUpTo(0) { inclusive = true }
+                                        }
+                                    },
                                     isAdmin = isAdmin,
                                     isSyncing = dashboardViewModel.isLoading,
                                     onRefresh = { dashboardViewModel.fetchDashboardData() },
