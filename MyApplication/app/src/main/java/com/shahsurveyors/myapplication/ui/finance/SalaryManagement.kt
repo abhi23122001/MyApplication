@@ -25,10 +25,10 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import com.shahsurveyors.myapplication.models.AdvanceSalaryRequest
 import com.shahsurveyors.myapplication.models.PayrollRecord
+import com.shahsurveyors.myapplication.ui.admin.Employee360DetailDialog
 import com.shahsurveyors.myapplication.ui.theme.*
 import java.io.File
-import java.time.YearMonth
-import java.time.format.DateTimeFormatter
+import java.text.SimpleDateFormat
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -77,8 +77,13 @@ fun SalaryManagementScreen(
 
     val formattedMonth = remember(viewModel.selectedYearMonth) {
         try {
-            val ym = YearMonth.parse(viewModel.selectedYearMonth, DateTimeFormatter.ofPattern("yyyy-MM"))
-            ym.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH))
+            val sdf = SimpleDateFormat("yyyy-MM", Locale.ENGLISH)
+            val date = sdf.parse(viewModel.selectedYearMonth)
+            if (date != null) {
+                SimpleDateFormat("MMMM yyyy", Locale.ENGLISH).format(date)
+            } else {
+                viewModel.selectedYearMonth
+            }
         } catch (e: Exception) {
             viewModel.selectedYearMonth
         }
@@ -104,75 +109,99 @@ fun SalaryManagementScreen(
                         )
                     }
                 },
+                actions = {
+                    if (isAdmin) {
+                        IconButton(onClick = {
+                            for (rec in viewModel.payrollRecords) {
+                                viewModel.syncPayrollToGoogleSheets(rec)
+                            }
+                            Toast.makeText(context, "Syncing all payroll records to Google Sheets...", Toast.LENGTH_SHORT).show()
+                        }) {
+                            Icon(
+                                imageVector = Icons.Default.CloudUpload,
+                                contentDescription = "Sync to Google Sheets",
+                                tint = ShahWhite
+                            )
+                        }
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = ShahDarkGreen
+                    containerColor = ShahDarkGreen,
+                    titleContentColor = ShahWhite
                 )
             )
         },
-        floatingActionButton = {
-            if (!isAdmin) {
-                ExtendedFloatingActionButton(
-                    onClick = { showRequestAdvanceDialog = true },
-                    icon = { Icon(Icons.Default.RequestQuote, contentDescription = null) },
-                    text = { Text("Request Advance") },
-                    containerColor = ShahGreen,
-                    contentColor = ShahWhite
-                )
-            }
-        }
+        containerColor = ShahBackground
     ) { paddingValues ->
-
         Column(
             modifier = Modifier
-                .padding(paddingValues)
                 .fillMaxSize()
-                .background(ShahGrey)
+                .padding(paddingValues)
         ) {
-            // Month Selector Header
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = ShahWhite)
+            // Month Selector Bar
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = ShahWhite,
+                shadowElevation = 2.dp
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = { viewModel.previousMonth(currentUid, isAdmin) }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Previous Month", tint = ShahGreen)
+                    IconButton(
+                        onClick = { viewModel.previousMonth(currentUid, isAdmin) },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Previous Month",
+                            tint = ShahDarkGreen
+                        )
                     }
 
-                    Text(
-                        text = formattedMonth.uppercase(Locale.ENGLISH),
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp,
-                        color = ShahDarkGreen
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.CalendarMonth,
+                            contentDescription = null,
+                            tint = ShahDarkGreen,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = formattedMonth,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            color = ShahDarkGreen
+                        )
+                    }
 
-                    IconButton(onClick = { viewModel.nextMonth(currentUid, isAdmin) }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Next Month", tint = ShahGreen)
+                    IconButton(
+                        onClick = { viewModel.nextMonth(currentUid, isAdmin) },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = "Next Month",
+                            tint = ShahDarkGreen
+                        )
                     }
                 }
             }
 
             if (isAdmin) {
-                // Admin Tabs: Payroll Records vs Advance Salary Approvals
+                // Admin Tabs: Payroll Records vs Advance Requests
                 TabRow(
                     selectedTabIndex = selectedTab,
                     containerColor = ShahWhite,
-                    contentColor = ShahGreen,
+                    contentColor = ShahDarkGreen,
                     indicator = { tabPositions ->
-                        if (selectedTab < tabPositions.size) {
-                            TabRowDefaults.SecondaryIndicator(
-                                modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
-                                color = ShahGreen
-                            )
-                        }
+                        TabRowDefaults.SecondaryIndicator(
+                            modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
+                            color = ShahGreen
+                        )
                     }
                 ) {
                     Tab(
@@ -180,8 +209,8 @@ fun SalaryManagementScreen(
                         onClick = { selectedTab = 0 },
                         text = {
                             Text(
-                                "Monthly Payroll (${filteredRecords.size})",
-                                fontWeight = FontWeight.Bold
+                                "Monthly Payroll (${viewModel.payrollRecords.size})",
+                                fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal
                             )
                         }
                     )
@@ -189,66 +218,65 @@ fun SalaryManagementScreen(
                         selected = selectedTab == 1,
                         onClick = { selectedTab = 1 },
                         text = {
-                            val count = viewModel.pendingAdvanceRequests.size
                             Text(
-                                if (count > 0) "Advance Requests ($count)" else "Advance Requests",
-                                fontWeight = FontWeight.Bold,
-                                color = if (count > 0) WarningAmber else ShahDarkGrey
+                                "Advance Requests (${viewModel.pendingAdvanceRequests.size})",
+                                fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal
                             )
                         }
                     )
                 }
 
                 if (selectedTab == 0) {
-                    // Search box
+                    // Search bar
                     OutlinedTextField(
                         value = viewModel.searchQuery,
                         onValueChange = { viewModel.searchQuery = it },
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(16.dp),
-                        placeholder = { Text("Search by employee name, ID, department...") },
-                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = ShahGreen,
-                            focusedContainerColor = ShahWhite,
-                            unfocusedContainerColor = ShahWhite
-                        )
-                    )
-
-                    // Admin Payroll Summary KPIs
-                    if (filteredRecords.isNotEmpty()) {
-                        val totalNet = filteredRecords.sumOf { it.netSalary }
-                        val totalDeductions = filteredRecords.sumOf { it.totalDeductions }
-
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 4.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(containerColor = ShahDarkGreen)
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column {
-                                    Text("TOTAL NET PAYROLL", fontSize = 11.sp, color = ShahWhite.copy(alpha = 0.8f), fontWeight = FontWeight.Bold)
-                                    Text("₹ ${String.format(Locale.ENGLISH, "%,.0f", totalNet)}", fontSize = 20.sp, color = ShahWhite, fontWeight = FontWeight.Bold)
-                                }
-
-                                Column(horizontalAlignment = Alignment.End) {
-                                    Text("TOTAL DEDUCTIONS", fontSize = 11.sp, color = ShahWhite.copy(alpha = 0.8f))
-                                    Text("₹ ${String.format(Locale.ENGLISH, "%,.0f", totalDeductions)}", fontSize = 14.sp, color = ShahWhite, fontWeight = FontWeight.SemiBold)
+                        placeholder = { Text("Search by name, ID or department...") },
+                        leadingIcon = {
+                            Icon(Icons.Default.Search, contentDescription = null, tint = ShahMediumGrey)
+                        },
+                        trailingIcon = {
+                            if (viewModel.searchQuery.isNotEmpty()) {
+                                IconButton(onClick = { viewModel.searchQuery = "" }) {
+                                    Icon(Icons.Default.Clear, contentDescription = "Clear", tint = ShahMediumGrey)
                                 }
                             }
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    // Summary Stats Header
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        color = ShahGreen.copy(alpha = 0.08f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceAround
+                        ) {
+                            val totalNet = filteredRecords.sumOf { it.netSalary }
+                            val totalPresent = filteredRecords.sumOf { it.presentDays }
+                            val totalHalf = filteredRecords.sumOf { it.halfDays }
+                            val totalAbsent = filteredRecords.sumOf { it.absentDays }
+
+                            PayrollSummaryStat("Total Staff", "${filteredRecords.size}")
+                            PayrollSummaryStat("Present (Full)", "$totalPresent")
+                            PayrollSummaryStat("Half Days", "$totalHalf")
+                            PayrollSummaryStat("Absent", "$totalAbsent")
+                            PayrollSummaryStat("Total Payout", "₹ ${totalNet.toInt()}")
                         }
                     }
+
+                    Spacer(modifier = Modifier.height(10.dp))
 
                     if (viewModel.isLoading) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -257,7 +285,7 @@ fun SalaryManagementScreen(
                     } else if (filteredRecords.isEmpty()) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Text(
-                                text = "No salary records found for $formattedMonth.\nConfigure employee salary in Employee Management.",
+                                text = "No staff records found for $formattedMonth.\nAdd employees in Employee Management.",
                                 color = ShahMediumGrey,
                                 style = MaterialTheme.typography.bodyMedium,
                                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -273,11 +301,18 @@ fun SalaryManagementScreen(
                             items(filteredRecords, key = { it.id }) { record ->
                                 PayrollRecordCard(
                                     record = record,
+                                    onOpen360Details = {
+                                        viewModel.loadEmployee360(record.employeeUid, viewModel.selectedYearMonth)
+                                    },
                                     onGenerateSlip = {
                                         val file = viewModel.generateSalarySlipPdf(context, record)
                                         if (file != null) {
                                             shareOrViewPdf(context, file)
                                         }
+                                    },
+                                    onSyncSheet = {
+                                        viewModel.syncPayrollToGoogleSheets(record)
+                                        Toast.makeText(context, "Synced ${record.name} to Google Sheet", Toast.LENGTH_SHORT).show()
                                     }
                                 )
                             }
@@ -356,6 +391,9 @@ fun SalaryManagementScreen(
                         item {
                             PayrollRecordCard(
                                 record = myRecord,
+                                onOpen360Details = {
+                                    viewModel.loadEmployee360(myRecord.employeeUid, viewModel.selectedYearMonth)
+                                },
                                 onGenerateSlip = {
                                     val file = viewModel.generateSalarySlipPdf(context, myRecord)
                                     if (file != null) {
@@ -378,13 +416,27 @@ fun SalaryManagementScreen(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
-                                        "No salary slip calculated for $formattedMonth yet.\nPlease contact Admin/HR.",
+                                        "No salary calculated for $formattedMonth yet.",
                                         color = ShahMediumGrey,
                                         style = MaterialTheme.typography.bodyMedium,
                                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
                                     )
                                 }
                             }
+                        }
+                    }
+
+                    // Request Advance Salary Button
+                    item {
+                        Button(
+                            onClick = { showRequestAdvanceDialog = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = ShahGreen, contentColor = ShahWhite),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.AddCircleOutline, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("REQUEST ADVANCE SALARY", fontWeight = FontWeight.Bold)
                         }
                     }
 
@@ -454,7 +506,23 @@ fun SalaryManagementScreen(
         }
     }
 
-    // Dialogs
+    // 360 Degree Detail Dialog
+    if (viewModel.selected360Report != null || viewModel.is360Loading) {
+        Employee360DetailDialog(
+            report = viewModel.selected360Report,
+            isLoading = viewModel.is360Loading,
+            onDismiss = { viewModel.clear360Report() },
+            onGenerateSlip = {
+                val rep = viewModel.selected360Report?.payroll
+                if (rep != null) {
+                    val file = viewModel.generateSalarySlipPdf(context, rep)
+                    if (file != null) shareOrViewPdf(context, file)
+                }
+            }
+        )
+    }
+
+    // Advance Dialogs
     if (showRequestAdvanceDialog) {
         RequestAdvanceSalaryDialog(
             currentYearMonth = viewModel.selectedYearMonth,
@@ -497,10 +565,14 @@ fun SalaryManagementScreen(
 @Composable
 fun PayrollRecordCard(
     record: PayrollRecord,
-    onGenerateSlip: () -> Unit
+    onOpen360Details: () -> Unit,
+    onGenerateSlip: () -> Unit,
+    onSyncSheet: (() -> Unit)? = null
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onOpen360Details() },
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = ShahWhite),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -513,12 +585,21 @@ fun PayrollRecordCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = record.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = ShahBlack
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = record.name,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = ShahBlack
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(
+                            Icons.Default.Info,
+                            contentDescription = "View 360 Summary",
+                            tint = ShahGreen,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                     Text(
                         text = "ID: ${record.employeeId} • ${record.dept} • ${record.role}",
                         style = MaterialTheme.typography.labelSmall,
@@ -547,15 +628,15 @@ fun PayrollRecordCard(
                 color = ShahLightGrey
             )
 
-            // Attendance & Days Breakdown
+            // Attendance & Days Breakdown (Present, Half Days, Absent, Leaves)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                PayrollInfoItem("Present", "${record.presentDays} days")
-                PayrollInfoItem("Leaves", "${record.approvedLeaveDays} days")
-                PayrollInfoItem("Absent", "${record.absentDays} days")
-                PayrollInfoItem("Overtime", "${record.overtimeHours} hrs")
+                PayrollInfoItem("Present", "${record.presentDays}d")
+                PayrollInfoItem("Half Day", "${record.halfDays}d")
+                PayrollInfoItem("Absent", "${record.absentDays}d")
+                PayrollInfoItem("Leaves", "${record.approvedLeaveDays}d")
             }
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -565,31 +646,39 @@ fun PayrollRecordCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                PayrollInfoItem("Basic Salary", "₹ ${record.baseMonthlySalary.toInt()}")
-                PayrollInfoItem("Overtime Pay", "+₹ ${record.overtimePay.toInt()}")
+                PayrollInfoItem("Base Rate", "₹ ${record.baseMonthlySalary.toInt()}")
+                PayrollInfoItem("Gross Earned", "₹ ${record.grossSalaryEarned.toInt()}")
+                PayrollInfoItem("Advance Ded.", "-₹ ${record.advanceDeduction.toInt()}")
                 PayrollInfoItem("Absence Ded.", "-₹ ${record.absenceDeduction.toInt()}")
-                PayrollInfoItem("Advance EMI", "-₹ ${record.advanceDeduction.toInt()}")
             }
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            Button(
-                onClick = onGenerateSlip,
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = ShahGreen, contentColor = ShahWhite),
-                shape = RoundedCornerShape(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.PictureAsPdf,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "DOWNLOAD / SHARE SALARY SLIP (PDF)",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 12.sp
-                )
+                OutlinedButton(
+                    onClick = onOpen360Details,
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = ShahDarkGreen),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Icon(Icons.Default.AccountCircle, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("360° SUMMARY", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+
+                Button(
+                    onClick = onGenerateSlip,
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = ShahGreen, contentColor = ShahWhite),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("SLIP (PDF)", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
             }
         }
     }
@@ -602,6 +691,16 @@ fun PayrollInfoItem(label: String, value: String) {
         Text(text = value, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = ShahBlack)
     }
 }
+
+@Composable
+private fun PayrollSummaryStat(label: String, value: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(value, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = ShahDarkGreen)
+        Text(label, fontSize = 10.sp, color = ShahDarkGrey)
+    }
+}
+
+
 
 private fun shareOrViewPdf(context: Context, file: File) {
     try {

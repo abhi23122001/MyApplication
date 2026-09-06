@@ -112,6 +112,7 @@ class AttendanceViewModel(
                 statusMessage = if (isPunchIn) "Punching IN..." else "Punching OUT..."
 
                 // 5. SAVE TO FIRESTORE DIRECTLY
+                val mapsUrl = "https://www.google.com/maps?q=${location.first},${location.second}"
                 withContext(Dispatchers.IO) {
                     try {
                         val attendanceDoc = firestore.collection("attendance").document()
@@ -121,12 +122,22 @@ class AttendanceViewModel(
                             "userUid" to currentUid,
                             "employeeUid" to currentUid,
                             "staffName" to staffName,
+                            "name" to staffName,
                             "workArea" to workArea,
+                            "siteName" to workArea,
                             "type" to action,
+                            "action" to action,
+                            "status" to "PRESENT",
                             "date" to todayDate,
                             "time" to currentTime,
                             "lat" to location.first,
                             "lng" to location.second,
+                            "Latitude" to location.first,
+                            "Longitude" to location.second,
+                            "punchInLat" to location.first,
+                            "punchInLng" to location.second,
+                            "googleMapsUrl" to mapsUrl,
+                            "mapsUrl" to mapsUrl,
                             "timestamp" to System.currentTimeMillis()
                         )
                         attendanceDoc.set(recordData).await()
@@ -194,13 +205,18 @@ class AttendanceViewModel(
                             "EmployeeID" to empId,
                             "empId" to empId,
                             "workArea" to workArea,
+                            "siteName" to workArea,
                             "date" to todayDate,
                             "time" to currentTime,
                             "lat" to location.first.toString(),
                             "lng" to location.second.toString(),
+                            "punchInLat" to location.first.toString(),
+                            "punchInLng" to location.second.toString(),
                             "Latitude" to location.first.toString(),
                             "Longitude" to location.second.toString(),
-                            "image" to base64Image
+                            "googleMapsUrl" to mapsUrl,
+                            "mapsUrl" to mapsUrl,
+                            "status" to "PRESENT"
                         )
                         RetrofitClient.api.handleAction(payload)
                     } catch (e: Exception) {
@@ -212,7 +228,7 @@ class AttendanceViewModel(
                                     "workArea" to workArea,
                                     "lat" to location.first.toString(),
                                     "lng" to location.second.toString(),
-                                    "image" to base64Image
+                                    "googleMapsUrl" to mapsUrl
                                 )
                             )
                         } catch (e2: Exception) {

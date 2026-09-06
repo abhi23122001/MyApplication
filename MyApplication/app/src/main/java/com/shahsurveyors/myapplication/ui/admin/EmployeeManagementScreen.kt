@@ -22,10 +22,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.firebase.firestore.FirebaseFirestore
 import com.shahsurveyors.myapplication.data.SalaryRepository
+import com.shahsurveyors.myapplication.models.Employee360Report
 import com.shahsurveyors.myapplication.models.SalaryProfileModel
 import com.shahsurveyors.myapplication.ui.theme.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 data class EmployeeItem(
     val uid: String = "",
@@ -57,6 +61,10 @@ fun EmployeeManagementScreen(
     var selectedEmployeeForSettings by remember { mutableStateOf<EmployeeItem?>(null) }
     var selectedEmployeeSalaryHistory by remember { mutableStateOf<List<SalaryProfileModel>>(emptyList()) }
     var showAddEmployeeDialog by remember { mutableStateOf(false) }
+
+    // 360 Degree Detail Dialog state
+    var selected360Report by remember { mutableStateOf<Employee360Report?>(null) }
+    var is360Loading by remember { mutableStateOf(false) }
 
     fun loadEmployees() {
         coroutineScope.launch {
@@ -120,9 +128,10 @@ fun EmployeeManagementScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = "Employee & Salary Settings",
+                        text = "Employee & Staff Hub",
                         fontWeight = FontWeight.Bold,
-                        color = ShahWhite
+                        color = ShahWhite,
+                        fontSize = 18.sp
                     )
                 },
                 navigationIcon = {
@@ -134,69 +143,98 @@ fun EmployeeManagementScreen(
                         )
                     }
                 },
+                actions = {
+                    IconButton(onClick = { loadEmployees() }) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Refresh",
+                            tint = ShahWhite
+                        )
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = ShahDarkGreen
+                    containerColor = ShahDarkGreen,
+                    titleContentColor = ShahWhite
                 )
             )
         },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showAddEmployeeDialog = true },
-                containerColor = ShahGreen,
-                contentColor = ShahWhite
-            ) {
-                Icon(imageVector = Icons.Default.Add, contentDescription = "Add Employee")
-            }
-        },
-        containerColor = ShahGrey
+        containerColor = ShahBackground
     ) { paddingValues ->
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .background(ShahGrey)
         ) {
-            // Search
+            // Search Bar
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp),
-                placeholder = { Text("Search by name, ID, department...") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
+                placeholder = { Text("Search by name, ID, role or department...") },
+                leadingIcon = {
+                    Icon(Icons.Default.Search, contentDescription = null, tint = ShahMediumGrey)
+                },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { searchQuery = "" }) {
+                            Icon(Icons.Default.Clear, contentDescription = "Clear", tint = ShahMediumGrey)
+                        }
+                    }
+                },
                 singleLine = true,
-                shape = RoundedCornerShape(12.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = ShahGreen,
-                    unfocusedBorderColor = ShahMediumGrey,
-                    focusedContainerColor = ShahWhite,
-                    unfocusedContainerColor = ShahWhite
-                )
+                shape = RoundedCornerShape(12.dp)
             )
 
-            Text(
-                text = "${filteredEmployees.size} Registered Employee(s) • Tap employee for Salary & Permissions",
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
-                color = ShahDarkGreen,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold
-            )
+            // Info banner
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                color = ShahGreen.copy(alpha = 0.08f),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.TouchApp, contentDescription = null, tint = ShahDarkGreen, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "Tap employee to open 360° Monthly Profile (Attendance, Leaves, GPS Map, Salary). Tap gear icon to change salary/permissions.",
+                        fontSize = 11.sp,
+                        color = ShahDarkGreen,
+                        lineHeight = 15.sp
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
 
             if (isLoading) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
                     CircularProgressIndicator(color = ShahGreen)
                 }
             } else if (filteredEmployees.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No employees found", color = ShahMediumGrey)
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "No employees found.",
+                        color = ShahMediumGrey,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
                 }
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(filteredEmployees, key = { it.uid }) { employee ->
                         Card(
@@ -204,9 +242,11 @@ fun EmployeeManagementScreen(
                                 .fillMaxWidth()
                                 .clickable {
                                     coroutineScope.launch {
-                                        val history = salaryRepository.getSalaryProfilesForEmployee(employee.uid)
-                                        selectedEmployeeSalaryHistory = history
-                                        selectedEmployeeForSettings = employee
+                                        is360Loading = true
+                                        val currentMonth = SimpleDateFormat("yyyy-MM", Locale.ENGLISH).format(Date())
+                                        val report = salaryRepository.getEmployee360Report(employee.uid, currentMonth)
+                                        selected360Report = report
+                                        is360Loading = false
                                     }
                                 },
                             shape = RoundedCornerShape(16.dp),
@@ -238,12 +278,21 @@ fun EmployeeManagementScreen(
                                 Spacer(modifier = Modifier.width(14.dp))
 
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = employee.name,
-                                        fontWeight = FontWeight.Bold,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        color = ShahBlack
-                                    )
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = employee.name,
+                                            fontWeight = FontWeight.Bold,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            color = ShahBlack
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Icon(
+                                            Icons.Default.Info,
+                                            contentDescription = "View 360",
+                                            tint = ShahGreen,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
                                         text = "ID: ${employee.id} • ${employee.role.uppercase()}",
@@ -259,18 +308,37 @@ fun EmployeeManagementScreen(
                                     )
                                 }
 
-                                Icon(
-                                    imageVector = Icons.Default.Tune,
-                                    contentDescription = "Configure Settings",
-                                    tint = ShahGreen,
-                                    modifier = Modifier.size(24.dp)
-                                )
+                                IconButton(
+                                    onClick = {
+                                        coroutineScope.launch {
+                                            val history = salaryRepository.getSalaryProfilesForEmployee(employee.uid)
+                                            selectedEmployeeSalaryHistory = history
+                                            selectedEmployeeForSettings = employee
+                                        }
+                                    }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Tune,
+                                        contentDescription = "Configure Settings",
+                                        tint = ShahGreen,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
                             }
                         }
                     }
                 }
             }
         }
+    }
+
+    // 360 Degree Detail Dialog
+    if (selected360Report != null || is360Loading) {
+        Employee360DetailDialog(
+            report = selected360Report,
+            isLoading = is360Loading,
+            onDismiss = { selected360Report = null }
+        )
     }
 
     // Employee Settings Dialog (Salary & Permissions)
@@ -319,84 +387,6 @@ fun EmployeeManagementScreen(
                     } catch (e: Exception) {
                         Toast.makeText(context, "Error: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
                     }
-                }
-            }
-        )
-    }
-
-    // Quick Add Employee Dialog
-    if (showAddEmployeeDialog) {
-        var newName by remember { mutableStateOf("") }
-        var newPhone by remember { mutableStateOf("") }
-        var newDept by remember { mutableStateOf("SURVEY") }
-        var newRole by remember { mutableStateOf("employee") }
-
-        AlertDialog(
-            onDismissRequest = { showAddEmployeeDialog = false },
-            title = { Text("Add New Staff Member", fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(
-                        value = newName,
-                        onValueChange = { newName = it },
-                        label = { Text("Full Name") },
-                        singleLine = true
-                    )
-                    OutlinedTextField(
-                        value = newPhone,
-                        onValueChange = { newPhone = it },
-                        label = { Text("Phone Number") },
-                        singleLine = true
-                    )
-                    OutlinedTextField(
-                        value = newDept,
-                        onValueChange = { newDept = it },
-                        label = { Text("Department (e.g. SURVEY, FINANCE)") },
-                        singleLine = true
-                    )
-                    OutlinedTextField(
-                        value = newRole,
-                        onValueChange = { newRole = it },
-                        label = { Text("Role (employee, surveyor, admin)") },
-                        singleLine = true
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        if (newName.isNotBlank()) {
-                            coroutineScope.launch {
-                                try {
-                                    val newDoc = firestore.collection("users").document()
-                                    val empData = hashMapOf(
-                                        "name" to newName.trim(),
-                                        "phone" to newPhone.trim(),
-                                        "department" to newDept.trim().uppercase(),
-                                        "role" to newRole.trim().lowercase(),
-                                        "employeeId" to "EMP${(100..999).random()}",
-                                        "access" to "ATTENDANCE,TASKS,CHAT",
-                                        "active" to true,
-                                        "approved" to true
-                                    )
-                                    newDoc.set(empData).await()
-                                    Toast.makeText(context, "Employee $newName added", Toast.LENGTH_SHORT).show()
-                                    showAddEmployeeDialog = false
-                                    loadEmployees()
-                                } catch (e: Exception) {
-                                    Toast.makeText(context, "Error: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = ShahGreen, contentColor = ShahWhite)
-                ) {
-                    Text("ADD EMPLOYEE")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showAddEmployeeDialog = false }) {
-                    Text("CANCEL", color = ShahGreen)
                 }
             }
         )

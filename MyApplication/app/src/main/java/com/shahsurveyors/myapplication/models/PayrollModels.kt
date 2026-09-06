@@ -103,8 +103,26 @@ data class AppNotification(
 )
 
 /**
+ * Daily Attendance punch log with GPS coordinates and Google Maps link.
+ */
+data class DailyPunchLog(
+    val id: String = "",
+    val date: String = "", // YYYY-MM-DD
+    val punchInTime: String = "",
+    val punchOutTime: String = "",
+    val punchInLat: Double = 0.0,
+    val punchInLng: Double = 0.0,
+    val punchOutLat: Double = 0.0,
+    val punchOutLng: Double = 0.0,
+    val workArea: String = "",
+    val dayStatus: String = "PRESENT", // PRESENT, HALF_DAY, ABSENT, LEAVE
+    val googleMapsUrl: String = "",
+    val totalHours: String = ""
+)
+
+/**
  * Final calculated monthly payroll breakdown for an employee.
- * Single source of truth across UI and PDF Salary Slip.
+ * Single source of truth across UI, PDF Salary Slip, and Google Sheets.
  */
 data class PayrollRecord(
     val id: String = "",
@@ -127,6 +145,8 @@ data class PayrollRecord(
     val totalDaysInMonth: Int = 30,
     val workingDaysInMonth: Int = 26,
     val presentDays: Int = 0,
+    val halfDays: Int = 0,
+    val effectivePresentDays: Double = 0.0,
     val approvedLeaveDays: Int = 0,
     val absentDays: Int = 0,
     val overtimeHours: Double = 0.0,
@@ -144,4 +164,43 @@ data class PayrollRecord(
     val paymentDate: Long? = null,
     val remarks: String = "",
     val generatedAt: Long = System.currentTimeMillis()
+)
+
+/**
+ * Employee 360° Monthly Comprehensive Details.
+ */
+data class Employee360Report(
+    val employeeUid: String = "",
+    val name: String = "",
+    val employeeId: String = "",
+    val department: String = "",
+    val role: String = "",
+    val phone: String = "",
+    val email: String = "",
+    val active: Boolean = true,
+    val month: String = "", // YYYY-MM
+
+    // Attendance stats
+    val presentDaysCount: Int = 0,
+    val halfDaysCount: Int = 0,
+    val absentDaysCount: Int = 0,
+    val approvedLeaveDaysCount: Int = 0,
+    val totalWorkingDays: Int = 26,
+    val dailyPunchLogs: List<DailyPunchLog> = emptyList(),
+
+    // Leaves
+    val leaveRequests: List<LeaveRequest> = emptyList(),
+
+    // Advances
+    val totalAdvanceApproved: Double = 0.0,
+    val advanceMonthlyDeduction: Double = 0.0,
+    val advanceRemainingBalance: Double = 0.0,
+    val advanceRequests: List<AdvanceSalaryRequest> = emptyList(),
+
+    // Expenses
+    val totalExpensesClaimed: Double = 0.0,
+    val totalExpensesApproved: Double = 0.0,
+
+    // Payroll record
+    val payroll: PayrollRecord? = null
 )

@@ -4,12 +4,14 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.SetOptions
-import com.shahsurveyors.myapplication.models.AdvanceSalaryRequest
-import com.shahsurveyors.myapplication.models.PayrollRecord
-import com.shahsurveyors.myapplication.models.SalaryProfileModel
+import com.shahsurveyors.myapplication.models.*
+import com.shahsurveyors.myapplication.utils.PayrollCalculator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class SalaryRepository(
     private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance(),
@@ -207,7 +209,6 @@ class SalaryRepository(
 
     suspend fun savePayrollRecord(record: PayrollRecord): Boolean = withContext(Dispatchers.IO) {
         try {
-            val currentUid = auth.currentUser?.uid ?: ""
             firestore.collection("payrollRecords")
                 .document(record.id)
                 .set(record, SetOptions.merge())
@@ -247,6 +248,187 @@ class SalaryRepository(
                 }
             } catch (e: Exception) {
                 null
+            }
+        }
+
+    // ========================================================
+    // 360° EMPLOYEE MONTHLY SUMMARY & DETAILS
+    // ========================================================
+
+    suspend fun getEmployee360Report(employeeUid: String, yearMonth: String): Employee360Report =
+        withContext(Dispatchers.IO) {
+            try {
+                // 1. User document
+                val userDoc = firestore.collection("users").document(employeeUid).get().await()
+                val name = userDoc.getString("name") ?: "Staff User"
+                val empId = userDoc.getString("employeeId") ?: userDoc.getString("id") ?: employeeUid.take(6).uppercase()
+                val dept = userDoc.getString("department") ?: userDoc.getString("dept") ?: "SURVEY"
+                val role = userDoc.getString("role") ?: "STAFF"
+                val phone = userDoc.getString("phone") ?: ""
+                val email = userDoc.getString("email") ?: ""
+                val active = userDoc.getBoolean("active") ?: true
+                val monthlySalaryFallback = userDoc.getDouble("monthlySalary")
+                    ?: userDoc.getDouble("salary")
+                    ?: 15000.0
+
+                // 2. Attendance punches in this month
+                val monthStart = "$yearMonth-01"
+                val monthEnd = "$yearMonth-31"
+
+                val attDocs = firestore.collection("attendance")
+                    .whereGreaterThanOrEqualTo("date", monthStart)
+                    .whereLessThanOrEqualTo("date", monthEnd)
+                    .get()
+                    .await()
+
+                val userAttDocs = attDocs.documents.filter {
+                    val docUid = it.getString("employeeUid") ?: it.getString("uid") ?: it.getString("userUid") ?: ""
+                    val docName = it.getString("staffName") ?: it.getString("name") ?: ""
+                    docUid == employeeUid || docName.equals(name, ignoreCase = true)
+                }
+
+                // Group by date to calculate Full Days vs Half Days
+                val punchesByDate = userAttDocs.groupBy { it.getString("date") ?: "" }
+
+                var presentCount = 0
+                var halfDayCount = 0
+                val dailyLogs = mutableListOf<DailyPunchLog>()
+
+                for ((dateKey, punches) in punchesByDate) {
+                    if (dateKey.isBlank()) continue
+
+                    val inPunch = punches.find {
+                        val t = it.getString("type") ?: it.getString("action") ?: ""
+                        t.contains("IN", ignoreCase = true)
+                    }
+                    val outPunch = punches.find {
+                        val t = it.getString("type") ?: it.getString("action") ?: ""
+                        t.contains("OUT", ignoreCase = true)
+                    }
+
+                    val inTime = inPunch?.getString("time") ?: inPunch?.getString("punchInTime") ?: ""
+                    val outTime = outPunch?.getString("time") ?: outPunch?.getString("punchOutTime") ?: ""
+                    val lat = inPunch?.getDouble("lat") ?: inPunch?.getDouble("Latitude") ?: 0.0
+                    val lng = inPunch?.getDouble("lng") ?: inPunch?.getDouble("Longitude") ?: 0.0
+                    val outLat = outPunch?.getDouble("lat") ?: 0.0
+                    val outLng = outPunch?.getDouble("lng") ?: 0.0
+                    val workArea = inPunch?.getString("workArea") ?: outPunch?.getString("workArea") ?: "Main Office / Site"
+
+                    val isFullDay = inPunch != null && outPunch != null
+                    val statusStr = if (isFullDay) "PRESENT" else "HALF_DAY"
+
+                    if (isFullDay) {
+                        presentCount++
+                    } else {
+                        halfDayCount++
+                    }
+
+                    val mapsUrl = if (lat != 0.0 && lng != 0.0) "https://www.google.com/maps?q=$lat,$lng" else ""
+
+                    dailyLogs.add(
+                        DailyPunchLog(
+                            id = dateKey,
+                            date = dateKey,
+                            punchInTime = inTime,
+                            punchOutTime = outTime,
+                            punchInLat = lat,
+                            punchInLng = lng,
+                            punchOutLat = outLat,
+                            punchOutLng = outLng,
+                            workArea = workArea,
+                            dayStatus = statusStr,
+                            googleMapsUrl = mapsUrl,
+                            totalHours = if (isFullDay) "8.5 hrs" else "Single Punch"
+                        )
+                    )
+                }
+
+                dailyLogs.sortByDescending { it.date }
+
+                // 3. Approved Leaves in this month
+                val leavesSnapshot = firestore.collection("leaves")
+                    .whereEqualTo("employeeUid", employeeUid)
+                    .get()
+                    .await()
+                val leavesList = leavesSnapshot.toObjects(LeaveRequest::class.java)
+                val approvedLeaves = leavesList.filter {
+                    it.status == "APPROVED" && (it.startDate.startsWith(yearMonth) || it.endDate.startsWith(yearMonth))
+                }
+                val leaveDaysCount = approvedLeaves.sumOf { it.totalDays }
+
+                // 4. Advances
+                val advances = getAdvanceRequestsForEmployee(employeeUid)
+                val approvedAdvances = advances.filter { it.status == "APPROVED" }
+                val totalAdvApproved = approvedAdvances.sumOf { it.approvedAmount }
+                val advMonthlyDeduction = PayrollCalculator.calculateAdvanceDeductionForMonth(approvedAdvances, yearMonth)
+
+                // 5. Expenses
+                val expSnapshot = firestore.collection("expenses")
+                    .whereEqualTo("employeeUid", employeeUid)
+                    .get()
+                    .await()
+                var totalClaimed = 0.0
+                var totalApproved = 0.0
+                for (doc in expSnapshot.documents) {
+                    val amt = doc.getDouble("amount") ?: 0.0
+                    val st = doc.getString("status") ?: "PENDING"
+                    totalClaimed += amt
+                    if (st == "APPROVED") {
+                        totalApproved += amt
+                    }
+                }
+
+                // 6. Calculate Payroll
+                val salaryProfiles = getSalaryProfilesForEmployee(employeeUid)
+                val payroll = PayrollCalculator.calculateMonthlyPayroll(
+                    employeeUid = employeeUid,
+                    employeeName = name,
+                    employeeId = empId,
+                    department = dept,
+                    role = role,
+                    yearMonth = yearMonth,
+                    salaryProfiles = salaryProfiles,
+                    fallbackMonthlySalary = monthlySalaryFallback,
+                    presentDays = presentCount,
+                    halfDays = halfDayCount,
+                    approvedLeaveDays = leaveDaysCount,
+                    approvedAdvances = approvedAdvances
+                )
+
+                val absentDays = maxOf(0, 26 - (presentCount + (halfDayCount * 0.5) + leaveDaysCount).toInt())
+
+                Employee360Report(
+                    employeeUid = employeeUid,
+                    name = name,
+                    employeeId = empId,
+                    department = dept,
+                    role = role,
+                    phone = phone,
+                    email = email,
+                    active = active,
+                    month = yearMonth,
+                    presentDaysCount = presentCount,
+                    halfDaysCount = halfDayCount,
+                    absentDaysCount = absentDays,
+                    approvedLeaveDaysCount = leaveDaysCount,
+                    totalWorkingDays = 26,
+                    dailyPunchLogs = dailyLogs,
+                    leaveRequests = leavesList,
+                    totalAdvanceApproved = totalAdvApproved,
+                    advanceMonthlyDeduction = advMonthlyDeduction,
+                    advanceRemainingBalance = maxOf(0.0, totalAdvApproved - advMonthlyDeduction),
+                    advanceRequests = advances,
+                    totalExpensesClaimed = totalClaimed,
+                    totalExpensesApproved = totalApproved,
+                    payroll = payroll
+                )
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+                Employee360Report(
+                    employeeUid = employeeUid,
+                    month = yearMonth
+                )
             }
         }
 }

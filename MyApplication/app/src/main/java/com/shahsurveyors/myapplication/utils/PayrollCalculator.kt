@@ -3,8 +3,9 @@ package com.shahsurveyors.myapplication.utils
 import com.shahsurveyors.myapplication.models.AdvanceSalaryRequest
 import com.shahsurveyors.myapplication.models.PayrollRecord
 import com.shahsurveyors.myapplication.models.SalaryProfileModel
-import java.time.YearMonth
-import java.time.format.DateTimeFormatter
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -17,20 +18,6 @@ object PayrollCalculator {
 
     /**
      * Calculates full PayrollRecord for a given employee and month.
-     *
-     * @param employeeUid Target employee UID
-     * @param employeeName Employee display name
-     * @param employeeId Employee ID (e.g. EMP001)
-     * @param department Department (e.g. SURVEY, FINANCE)
-     * @param role Role (e.g. STAFF, SURVEYOR)
-     * @param yearMonth Selected salary month in "YYYY-MM" format (e.g. "2026-08")
-     * @param salaryProfiles List of salary profiles for this employee (historical & active)
-     * @param presentDays Verified present punch days in this month
-     * @param approvedLeaveDays Verified approved paid leave days in this month
-     * @param overtimeHours Verified overtime hours worked in this month
-     * @param approvedAdvances List of approved advance salary requests for this employee
-     * @param otherDeductions Any miscellaneous penalties or deductions
-     * @return Fully calculated PayrollRecord or null if no valid salary profile covers this month
      */
     fun calculateMonthlyPayroll(
         employeeUid: String,
@@ -40,27 +27,23 @@ object PayrollCalculator {
         role: String,
         yearMonth: String, // "YYYY-MM"
         salaryProfiles: List<SalaryProfileModel>,
+        fallbackMonthlySalary: Double = 15000.0,
         presentDays: Int = 0,
+        halfDays: Int = 0,
         approvedLeaveDays: Int = 0,
         overtimeHours: Double = 0.0,
         approvedAdvances: List<AdvanceSalaryRequest> = emptyList(),
         otherDeductions: Double = 0.0
-    ): PayrollRecord? {
+    ): PayrollRecord {
 
-        val profile = findApplicableSalaryProfile(salaryProfiles, yearMonth) ?: return null
+        val profile = findApplicableSalaryProfile(salaryProfiles, yearMonth)
 
-        val parsedYearMonth = try {
-            YearMonth.parse(yearMonth, DateTimeFormatter.ofPattern("yyyy-MM"))
-        } catch (e: Exception) {
-            YearMonth.now()
-        }
-
-        val totalDaysInMonth = parsedYearMonth.lengthOfMonth()
+        val totalDaysInMonth = getDaysInMonth(yearMonth)
         val workingDaysInMonth = STANDARD_WORKING_DAYS
 
         // Base rates
-        val monthlySalary = profile.monthlySalary
-        val dailyRate = if (profile.dailyRate > 0) {
+        val monthlySalary = profile?.monthlySalary ?: if (fallbackMonthlySalary > 0) fallbackMonthlySalary else 15000.0
+        val dailyRate = if (profile != null && profile.dailyRate > 0) {
             profile.dailyRate
         } else if (monthlySalary > 0) {
             (monthlySalary / workingDaysInMonth * 100.0).roundToInt() / 100.0
@@ -68,33 +51,33 @@ object PayrollCalculator {
             0.0
         }
 
-        val overtimeRate = if (profile.overtimeRatePerHour > 0) {
+        val overtimeRate = if (profile != null && profile.overtimeRatePerHour > 0) {
             profile.overtimeRatePerHour
         } else if (dailyRate > 0) {
-            // Default 8-hour shift overtime rate
             ((dailyRate / 8.0) * 1.5 * 100.0).roundToInt() / 100.0
         } else {
             0.0
         }
 
-        // Calculate Effective Period Proration if effective date started mid-month
-        val (effectiveBaseSalary, effectivePeriodText) = calculateEffectiveBaseSalary(
-            profile = profile,
-            yearMonth = yearMonth,
-            totalDaysInMonth = totalDaysInMonth
-        )
+        // Calculate Effective Period Proration
+        val (effectiveBaseSalary, effectivePeriodText) = if (profile != null) {
+            calculateEffectiveBaseSalary(profile, yearMonth, totalDaysInMonth)
+        } else {
+            Pair(monthlySalary, "Standard Rate")
+        }
 
         // Attendance & Absence
-        // Approved leave is paid leave (does not create absence deduction)
-        val nonAbsenceDays = presentDays + approvedLeaveDays
-        val absentDays = maxOf(0, workingDaysInMonth - nonAbsenceDays)
+        // Half days count as 0.5 present day
+        val effectivePresent = presentDays + (halfDays * 0.5)
+        val nonAbsenceDays = effectivePresent + approvedLeaveDays
+        val absentDays = maxOf(0, (workingDaysInMonth - nonAbsenceDays).roundToInt())
         val absenceDeduction = ((absentDays * dailyRate) * 100.0).roundToInt() / 100.0
 
         // Overtime Earnings
         val overtimePay = ((overtimeHours * overtimeRate) * 100.0).roundToInt() / 100.0
 
         // Gross Salary Earned
-        val grossSalaryEarned = maxOf(0.0, effectiveBaseSalary - absenceDeduction + overtimePay)
+        val grossSalaryEarned = maxOf(0.0, ((nonAbsenceDays * dailyRate + overtimePay) * 100.0).roundToInt() / 100.0)
 
         // Advance Salary Deductions calculation
         val advanceDeduction = calculateAdvanceDeductionForMonth(
@@ -108,8 +91,8 @@ object PayrollCalculator {
             ((effectiveBaseSalary + overtimePay - totalDeductions) * 100.0).roundToInt() / 100.0
         )
 
-        val monthFormatter = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH)
-        val monthName = parsedYearMonth.format(monthFormatter)
+        val monthName = getMonthName(yearMonth)
+        val year = getYear(yearMonth)
 
         return PayrollRecord(
             id = "${employeeUid}_${yearMonth}",
@@ -119,7 +102,7 @@ object PayrollCalculator {
             dept = department,
             role = role,
             salaryMonth = yearMonth,
-            year = parsedYearMonth.year,
+            year = year,
             monthName = monthName,
             baseMonthlySalary = monthlySalary,
             dailyRate = dailyRate,
@@ -128,6 +111,8 @@ object PayrollCalculator {
             totalDaysInMonth = totalDaysInMonth,
             workingDaysInMonth = workingDaysInMonth,
             presentDays = presentDays,
+            halfDays = halfDays,
+            effectivePresentDays = effectivePresent,
             approvedLeaveDays = approvedLeaveDays,
             absentDays = absentDays,
             overtimeHours = overtimeHours,
@@ -140,6 +125,49 @@ object PayrollCalculator {
             netSalary = netSalary,
             status = "CALCULATED"
         )
+    }
+
+    /**
+     * Safe Month length calculation using Calendar.
+     */
+    fun getDaysInMonth(yearMonth: String): Int {
+        return try {
+            val parts = yearMonth.split("-")
+            val year = parts[0].toInt()
+            val month = parts[1].toInt() - 1
+            val cal = Calendar.getInstance()
+            cal.set(Calendar.YEAR, year)
+            cal.set(Calendar.MONTH, month)
+            cal.set(Calendar.DAY_OF_MONTH, 1)
+            cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+        } catch (e: Exception) {
+            30
+        }
+    }
+
+    /**
+     * Safe Month name formatter using SimpleDateFormat.
+     */
+    fun getMonthName(yearMonth: String): String {
+        return try {
+            val sdf = SimpleDateFormat("yyyy-MM", Locale.ENGLISH)
+            val date = sdf.parse(yearMonth)
+            if (date != null) {
+                SimpleDateFormat("MMMM yyyy", Locale.ENGLISH).format(date)
+            } else {
+                yearMonth
+            }
+        } catch (e: Exception) {
+            yearMonth
+        }
+    }
+
+    fun getYear(yearMonth: String): Int {
+        return try {
+            yearMonth.split("-")[0].toInt()
+        } catch (e: Exception) {
+            Calendar.getInstance().get(Calendar.YEAR)
+        }
     }
 
     /**
@@ -205,11 +233,6 @@ object PayrollCalculator {
 
     /**
      * Calculates the total advance installment deduction for the selected target month.
-     *
-     * Rule:
-     * - Only APPROVED advances.
-     * - Monthly EMI = approvedAmount / installments.
-     * - Begins in requestedMonth (e.g. 2026-08) and applies for exactly 'installments' months.
      */
     fun calculateAdvanceDeductionForMonth(
         approvedAdvances: List<AdvanceSalaryRequest>,
@@ -217,31 +240,22 @@ object PayrollCalculator {
     ): Double {
         var totalDeduction = 0.0
 
-        val targetYm = try {
-            YearMonth.parse(targetYearMonth, DateTimeFormatter.ofPattern("yyyy-MM"))
-        } catch (e: Exception) {
-            return 0.0
-        }
+        val targetParts = targetYearMonth.split("-")
+        if (targetParts.size < 2) return 0.0
+        val targetYear = targetParts[0].toIntOrNull() ?: return 0.0
+        val targetMonth = targetParts[1].toIntOrNull() ?: return 0.0
 
         for (advance in approvedAdvances) {
-            // Strictly only consider APPROVED advances
             if (advance.status != "APPROVED") continue
             if (advance.approvedAmount <= 0 || advance.installments <= 0) continue
 
-            val startYm = try {
-                if (advance.requestedMonth.isNotBlank()) {
-                    YearMonth.parse(advance.requestedMonth, DateTimeFormatter.ofPattern("yyyy-MM"))
-                } else {
-                    targetYm
-                }
-            } catch (e: Exception) {
-                targetYm
-            }
+            val reqParts = advance.requestedMonth.split("-")
+            val reqYear = if (reqParts.size >= 2) reqParts[0].toIntOrNull() ?: targetYear else targetYear
+            val reqMonth = if (reqParts.size >= 2) reqParts[1].toIntOrNull() ?: targetMonth else targetMonth
 
             val monthlyEmi = (advance.approvedAmount / advance.installments * 100.0).roundToInt() / 100.0
 
-            // Check if targetYm falls within [startYm, startYm + installments - 1]
-            val monthsDiff = (targetYm.year - startYm.year) * 12 + (targetYm.monthValue - startYm.monthValue)
+            val monthsDiff = (targetYear - reqYear) * 12 + (targetMonth - reqMonth)
 
             if (monthsDiff in 0 until advance.installments) {
                 totalDeduction += monthlyEmi

@@ -11,19 +11,18 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.shahsurveyors.myapplication.data.BillingRepository
 import com.shahsurveyors.myapplication.data.SalaryRepository
 import com.shahsurveyors.myapplication.data.local.CompanyProfile
-import com.shahsurveyors.myapplication.models.AdvanceSalaryRequest
-import com.shahsurveyors.myapplication.models.PayrollRecord
-import com.shahsurveyors.myapplication.models.SalaryProfileModel
+import com.shahsurveyors.myapplication.models.*
+import com.shahsurveyors.myapplication.network.RetrofitClient
 import com.shahsurveyors.myapplication.utils.PayrollCalculator
 import com.shahsurveyors.myapplication.utils.SalarySlipGenerator
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.time.YearMonth
-import java.time.format.DateTimeFormatter
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
 import java.util.Locale
 
 class SalaryViewModel(
@@ -35,6 +34,9 @@ class SalaryViewModel(
     var isLoading by mutableStateOf(false)
         private set
 
+    var is360Loading by mutableStateOf(false)
+        private set
+
     var errorMessage by mutableStateOf<String?>(null)
         private set
 
@@ -42,7 +44,7 @@ class SalaryViewModel(
         private set
 
     var selectedYearMonth by mutableStateOf(
-        YearMonth.now().format(DateTimeFormatter.ofPattern("yyyy-MM"))
+        SimpleDateFormat("yyyy-MM", Locale.ENGLISH).format(Date())
     )
         private set
 
@@ -59,6 +61,10 @@ class SalaryViewModel(
     val myAdvanceRequests = mutableStateListOf<AdvanceSalaryRequest>()
     val pendingAdvanceRequests = mutableStateListOf<AdvanceSalaryRequest>()
 
+    // Selected 360 Employee details
+    var selected360Report by mutableStateOf<Employee360Report?>(null)
+        private set
+
     var lastGeneratedSlipFile by mutableStateOf<File?>(null)
         private set
 
@@ -69,9 +75,15 @@ class SalaryViewModel(
 
     fun previousMonth(currentUid: String, isAdmin: Boolean) {
         try {
-            val current = YearMonth.parse(selectedYearMonth, DateTimeFormatter.ofPattern("yyyy-MM"))
-            val prev = current.minusMonths(1)
-            selectedYearMonth = prev.format(DateTimeFormatter.ofPattern("yyyy-MM"))
+            val parts = selectedYearMonth.split("-")
+            val year = parts[0].toInt()
+            val month = parts[1].toInt() - 1 // 0-indexed
+            val cal = Calendar.getInstance()
+            cal.set(Calendar.YEAR, year)
+            cal.set(Calendar.MONTH, month)
+            cal.set(Calendar.DAY_OF_MONTH, 1)
+            cal.add(Calendar.MONTH, -1)
+            selectedYearMonth = SimpleDateFormat("yyyy-MM", Locale.ENGLISH).format(cal.time)
             loadPayrollData(currentUid, isAdmin)
         } catch (e: Exception) {
             e.printStackTrace()
@@ -80,9 +92,15 @@ class SalaryViewModel(
 
     fun nextMonth(currentUid: String, isAdmin: Boolean) {
         try {
-            val current = YearMonth.parse(selectedYearMonth, DateTimeFormatter.ofPattern("yyyy-MM"))
-            val next = current.plusMonths(1)
-            selectedYearMonth = next.format(DateTimeFormatter.ofPattern("yyyy-MM"))
+            val parts = selectedYearMonth.split("-")
+            val year = parts[0].toInt()
+            val month = parts[1].toInt() - 1
+            val cal = Calendar.getInstance()
+            cal.set(Calendar.YEAR, year)
+            cal.set(Calendar.MONTH, month)
+            cal.set(Calendar.DAY_OF_MONTH, 1)
+            cal.add(Calendar.MONTH, 1)
+            selectedYearMonth = SimpleDateFormat("yyyy-MM", Locale.ENGLISH).format(cal.time)
             loadPayrollData(currentUid, isAdmin)
         } catch (e: Exception) {
             e.printStackTrace()
@@ -90,9 +108,30 @@ class SalaryViewModel(
     }
 
     /**
+     * Loads 360° Monthly Employee Details when Admin clicks an employee name.
+     */
+    fun loadEmployee360(employeeUid: String, yearMonth: String = selectedYearMonth) {
+        viewModelScope.launch {
+            is360Loading = true
+            try {
+                val report = salaryRepository.getEmployee360Report(employeeUid, yearMonth)
+                selected360Report = report
+            } catch (e: Exception) {
+                e.printStackTrace()
+                errorMessage = "Unable to load employee details: ${e.localizedMessage}"
+            } finally {
+                is360Loading = false
+            }
+        }
+    }
+
+    fun clear360Report() {
+        selected360Report = null
+    }
+
+    /**
      * Loads payroll data for the selected month.
-     * Uses PayrollCalculator to dynamically compute records based on salary profiles,
-     * attendance, leaves, and approved advance deductions.
+     * Computes real attendance, half days, absent days, and approved advance deductions.
      */
     fun loadPayrollData(currentUid: String, isAdmin: Boolean) {
         viewModelScope.launch {
@@ -115,11 +154,27 @@ class SalaryViewModel(
                 myAdvanceRequests.clear()
                 myAdvanceRequests.addAll(allAdvances.filter { it.employeeUid == currentUid })
 
+                // 3. Query all attendance records for this month
+                val monthStart = "$selectedYearMonth-01"
+                val monthEnd = "$selectedYearMonth-31"
+                val attSnapshot = firestore.collection("attendance")
+                    .whereGreaterThanOrEqualTo("date", monthStart)
+                    .whereLessThanOrEqualTo("date", monthEnd)
+                    .get()
+                    .await()
+                val attDocs = attSnapshot.documents
+
+                // 4. Query all approved leaves for this month
+                val leavesSnapshot = firestore.collection("leaves")
+                    .whereEqualTo("status", "APPROVED")
+                    .get()
+                    .await()
+                val leavesList = leavesSnapshot.toObjects(LeaveRequest::class.java)
+
                 if (isAdmin) {
-                    // Group salary profiles by employeeUid
                     val profilesByEmployee = allProfiles.groupBy { it.employeeUid }
 
-                    // Fetch users from Firestore
+                    // Fetch all users from Firestore
                     val usersSnapshot = firestore.collection("users").get().await()
                     val userDocs = usersSnapshot.documents
 
@@ -127,15 +182,49 @@ class SalaryViewModel(
 
                     for (userDoc in userDocs) {
                         val uid = userDoc.id
-                        val name = userDoc.getString("name") ?: "Employee"
-                        val empId = userDoc.getString("employeeId") ?: userDoc.getString("id") ?: uid.take(6)
+                        val name = userDoc.getString("name") ?: "Staff User"
+                        val empId = userDoc.getString("employeeId") ?: userDoc.getString("id") ?: uid.take(6).uppercase()
                         val dept = userDoc.getString("department") ?: userDoc.getString("dept") ?: "SURVEY"
                         val role = userDoc.getString("role") ?: "STAFF"
+                        val salaryFallback = userDoc.getDouble("monthlySalary")
+                            ?: userDoc.getDouble("salary")
+                            ?: 15000.0
 
                         val employeeProfiles = profilesByEmployee[uid] ?: emptyList()
                         val employeeAdvances = approvedAdvances.filter { it.employeeUid == uid }
 
-                        // Calculate payroll for this employee
+                        // Calculate attendance for this employee
+                        val employeePunches = attDocs.filter {
+                            val docUid = it.getString("employeeUid") ?: it.getString("uid") ?: it.getString("userUid") ?: ""
+                            val docName = it.getString("staffName") ?: it.getString("name") ?: ""
+                            docUid == uid || docName.equals(name, ignoreCase = true)
+                        }
+
+                        val punchesByDate = employeePunches.groupBy { it.getString("date") ?: "" }
+                        var presentCount = 0
+                        var halfDayCount = 0
+
+                        for ((_, punches) in punchesByDate) {
+                            val inPunch = punches.find {
+                                val t = it.getString("type") ?: it.getString("action") ?: ""
+                                t.contains("IN", ignoreCase = true)
+                            }
+                            val outPunch = punches.find {
+                                val t = it.getString("type") ?: it.getString("action") ?: ""
+                                t.contains("OUT", ignoreCase = true)
+                            }
+                            if (inPunch != null && outPunch != null) {
+                                presentCount++
+                            } else {
+                                halfDayCount++
+                            }
+                        }
+
+                        val employeeLeaves = leavesList.filter {
+                            it.employeeUid == uid && (it.startDate.startsWith(selectedYearMonth) || it.endDate.startsWith(selectedYearMonth))
+                        }
+                        val approvedLeaveDays = employeeLeaves.sumOf { it.totalDays }
+
                         val record = PayrollCalculator.calculateMonthlyPayroll(
                             employeeUid = uid,
                             employeeName = name,
@@ -144,33 +233,65 @@ class SalaryViewModel(
                             role = role,
                             yearMonth = selectedYearMonth,
                             salaryProfiles = employeeProfiles,
-                            presentDays = 24, // Standard attendance
-                            approvedLeaveDays = 1,
-                            overtimeHours = 0.0,
+                            fallbackMonthlySalary = salaryFallback,
+                            presentDays = presentCount,
+                            halfDays = halfDayCount,
+                            approvedLeaveDays = approvedLeaveDays,
                             approvedAdvances = employeeAdvances
                         )
 
-                        if (record != null) {
-                            calculatedList.add(record)
-                        }
+                        calculatedList.add(record)
                     }
 
                     payrollRecords.clear()
                     payrollRecords.addAll(calculatedList)
 
-                    // Also set current user's record if in list
                     myPayrollRecord = calculatedList.find { it.employeeUid == currentUid }
 
                 } else {
-                    // Non-admin employee: only compute own record
+                    // Non-admin employee: compute own record
                     val myProfiles = allProfiles.filter { it.employeeUid == currentUid }
                     val myApprovedAdvances = approvedAdvances.filter { it.employeeUid == currentUid }
 
                     val userDoc = firestore.collection("users").document(currentUid).get().await()
-                    val name = userDoc.getString("name") ?: "Employee"
-                    val empId = userDoc.getString("employeeId") ?: userDoc.getString("id") ?: currentUid.take(6)
+                    val name = userDoc.getString("name") ?: "Staff User"
+                    val empId = userDoc.getString("employeeId") ?: userDoc.getString("id") ?: currentUid.take(6).uppercase()
                     val dept = userDoc.getString("department") ?: userDoc.getString("dept") ?: "SURVEY"
                     val role = userDoc.getString("role") ?: "STAFF"
+                    val salaryFallback = userDoc.getDouble("monthlySalary")
+                        ?: userDoc.getDouble("salary")
+                        ?: 15000.0
+
+                    val myPunches = attDocs.filter {
+                        val docUid = it.getString("employeeUid") ?: it.getString("uid") ?: it.getString("userUid") ?: ""
+                        val docName = it.getString("staffName") ?: it.getString("name") ?: ""
+                        docUid == currentUid || docName.equals(name, ignoreCase = true)
+                    }
+
+                    val punchesByDate = myPunches.groupBy { it.getString("date") ?: "" }
+                    var presentCount = 0
+                    var halfDayCount = 0
+
+                    for ((_, punches) in punchesByDate) {
+                        val inPunch = punches.find {
+                            val t = it.getString("type") ?: it.getString("action") ?: ""
+                            t.contains("IN", ignoreCase = true)
+                        }
+                        val outPunch = punches.find {
+                            val t = it.getString("type") ?: it.getString("action") ?: ""
+                            t.contains("OUT", ignoreCase = true)
+                        }
+                        if (inPunch != null && outPunch != null) {
+                            presentCount++
+                        } else {
+                            halfDayCount++
+                        }
+                    }
+
+                    val myLeaves = leavesList.filter {
+                        it.employeeUid == currentUid && (it.startDate.startsWith(selectedYearMonth) || it.endDate.startsWith(selectedYearMonth))
+                    }
+                    val approvedLeaveDays = myLeaves.sumOf { it.totalDays }
 
                     val record = PayrollCalculator.calculateMonthlyPayroll(
                         employeeUid = currentUid,
@@ -180,17 +301,16 @@ class SalaryViewModel(
                         role = role,
                         yearMonth = selectedYearMonth,
                         salaryProfiles = myProfiles,
-                        presentDays = 24,
-                        approvedLeaveDays = 1,
-                        overtimeHours = 0.0,
+                        fallbackMonthlySalary = salaryFallback,
+                        presentDays = presentCount,
+                        halfDays = halfDayCount,
+                        approvedLeaveDays = approvedLeaveDays,
                         approvedAdvances = myApprovedAdvances
                     )
 
                     myPayrollRecord = record
                     payrollRecords.clear()
-                    if (record != null) {
-                        payrollRecords.add(record)
-                    }
+                    payrollRecords.add(record)
                 }
 
             } catch (e: Exception) {
@@ -247,7 +367,7 @@ class SalaryViewModel(
      */
     fun decideAdvanceRequest(
         requestId: String,
-        status: String, // APPROVED or REJECTED
+        status: String,
         approvedAmount: Double,
         installments: Int,
         adminUid: String,
@@ -278,11 +398,47 @@ class SalaryViewModel(
     }
 
     /**
+     * Sync payroll to Google Sheets.
+     */
+    fun syncPayrollToGoogleSheets(record: PayrollRecord) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val payload = mapOf<String, Any>(
+                    "action" to "SYNC_PAYROLL",
+                    "month" to record.salaryMonth,
+                    "monthName" to record.monthName,
+                    "employeeUid" to record.employeeUid,
+                    "employeeName" to record.name,
+                    "employeeId" to record.employeeId,
+                    "department" to record.dept,
+                    "role" to record.role,
+                    "baseMonthlySalary" to record.baseMonthlySalary,
+                    "dailyRate" to record.dailyRate,
+                    "totalDaysInMonth" to record.totalDaysInMonth,
+                    "workingDaysInMonth" to record.workingDaysInMonth,
+                    "presentDays" to record.presentDays,
+                    "halfDays" to record.halfDays,
+                    "approvedLeaveDays" to record.approvedLeaveDays,
+                    "absentDays" to record.absentDays,
+                    "grossSalaryEarned" to record.grossSalaryEarned,
+                    "advanceDeduction" to record.advanceDeduction,
+                    "absenceDeduction" to record.absenceDeduction,
+                    "netSalary" to record.netSalary,
+                    "status" to record.status
+                )
+                RetrofitClient.api.handleAction(payload)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    /**
      * Generates a PDF salary slip using SalarySlipGenerator.
      */
     fun generateSalarySlipPdf(context: Context, record: PayrollRecord): File? {
         return try {
-            val company = CompanyProfile() // Standard Shah Surveyors profile
+            val company = CompanyProfile()
             val file = SalarySlipGenerator.generateSalarySlipPdf(
                 context = context,
                 record = record,
