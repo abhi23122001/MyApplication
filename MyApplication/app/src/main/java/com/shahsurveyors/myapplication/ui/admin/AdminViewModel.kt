@@ -1,6 +1,7 @@
 package com.shahsurveyors.myapplication.ui.admin
 
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -9,6 +10,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.firestore.FirebaseFirestore
 import com.shahsurveyors.myapplication.data.BillingRepository
+import com.shahsurveyors.myapplication.data.DataSyncRepository
+import com.shahsurveyors.myapplication.data.SyncResult
 import com.shahsurveyors.myapplication.data.local.BankDetails
 import com.shahsurveyors.myapplication.data.local.CompanyProfile
 import com.shahsurveyors.myapplication.data.local.TermConditionEntity
@@ -65,11 +68,12 @@ data class AttendanceRecord(
 
 class AdminViewModel(
     private val repository: BillingRepository,
-    private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
+    private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance(),
+    private val syncRepository: DataSyncRepository = DataSyncRepository()
 ) : ViewModel() {
 
     // ========================================================
-    // GENERAL STATE
+    // GENERAL & SYNC STATE
     // ========================================================
 
     var isLoading by mutableStateOf(false)
@@ -77,6 +81,20 @@ class AdminViewModel(
 
     var errorMessage by mutableStateOf<String?>(null)
         private set
+
+    var isSyncingToSheets by mutableStateOf(false)
+        private set
+
+    var syncProgressStatus by mutableStateOf("Ready to sync")
+        private set
+
+    var syncProgressPercent by mutableFloatStateOf(0f)
+        private set
+
+    var lastSyncResult by mutableStateOf<SyncResult?>(null)
+        private set
+
+    var showSyncDialog by mutableStateOf(false)
 
 
     // ========================================================
@@ -434,5 +452,38 @@ class AdminViewModel(
 
     fun clearError() {
         errorMessage = null
+    }
+
+    // ========================================================
+    // BULK DATA SYNC TO GOOGLE SHEETS
+    // ========================================================
+
+    fun syncAllDataToGoogleSheets() {
+        if (isSyncingToSheets) return
+        viewModelScope.launch {
+            isSyncingToSheets = true
+            showSyncDialog = true
+            syncProgressPercent = 0.05f
+            syncProgressStatus = "Connecting to Firestore..."
+            try {
+                val result = syncRepository.syncAllFirestoreDataToGoogleSheets { status, progress ->
+                    syncProgressStatus = status
+                    syncProgressPercent = progress
+                }
+                lastSyncResult = result
+                fetchAdminData()
+            } catch (e: Exception) {
+                lastSyncResult = SyncResult(
+                    isSuccess = false,
+                    message = e.localizedMessage ?: "Sync error occurred"
+                )
+            } finally {
+                isSyncingToSheets = false
+            }
+        }
+    }
+
+    fun dismissSyncDialog() {
+        showSyncDialog = false
     }
 }
