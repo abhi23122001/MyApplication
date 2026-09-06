@@ -234,6 +234,17 @@ function processSingleRecord(ss, data) {
 
 function doGet(e) {
   var action = (e && e.parameter && e.parameter.action) ? e.parameter.action.toUpperCase() : "STATUS";
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  if (action === "FETCH_ALL_SYNC_DATA" || action === "FETCH_ATTENDANCE") {
+    var attendanceSheet = ss.getSheetByName("Master_Attendance") || ss.getSheetByName("Attendance") || ss.getActiveSheet();
+    var data = attendanceSheet.getDataRange().getValues();
+    return responseJson({
+      status: "SUCCESS",
+      attendance: data
+    });
+  }
+
   return responseJson({
     status: "ONLINE",
     service: "SHAH SURVEYORS & ERP GOOGLE SHEETS CONNECTOR",
