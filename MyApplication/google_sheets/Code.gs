@@ -371,6 +371,17 @@ function buildEmployeeSheetLayout(sheet, empId, empName, meta) {
   sheet.setColumnWidth(8, 200); // Remarks / Receipt Link
 }
 
+function findExpenseHeaderRow(sheet) {
+  var lastRow = Math.max(sheet.getLastRow(), 62);
+  var values = sheet.getRange(1, 1, lastRow, 1).getDisplayValues();
+  for (var i = 0; i < values.length; i++) {
+    if ((values[i][0] || "").toString().indexOf("EXPENSE CLAIMS & REIMBURSEMENTS") !== -1) {
+      return i + 1;
+    }
+  }
+  return 62;
+}
+
 function updateEmployeeInfoCard(sheet, empId, empName, meta) {
   if (empId) sheet.getRange("B3").setValue(empId);
   if (meta.joiningDate) sheet.getRange("D3").setValue(meta.joiningDate);
@@ -477,7 +488,9 @@ function handleAttendancePunch(ss, data) {
 
   // 2. UPDATE PER-EMPLOYEE DEDICATED TAB
   var empSheet = getOrCreateEmployeeSheet(ss, empId, empName, data);
-  var empValues = empSheet.getRange("A11:H60").getValues();
+  var expenseHeaderRow = findExpenseHeaderRow(empSheet);
+  var attendanceEndRow = Math.max(61, expenseHeaderRow - 1);
+  var empValues = empSheet.getRange(11, 1, attendanceEndRow - 10, 8).getValues();
   var foundEmpRow = -1;
   var firstEmptyRow = -1;
 
@@ -499,8 +512,10 @@ function handleAttendancePunch(ss, data) {
   } else if (firstEmptyRow > 0) {
     empSheet.getRange(firstEmptyRow, 1, 1, empRowData.length).setValues([empRowData]);
   } else {
-    empSheet.insertRowBefore(61);
-    empSheet.getRange(61, 1, 1, empRowData.length).setValues([empRowData]);
+    // Never insert inside the expense section. Grow attendance immediately
+    // above the expense header so the KPI range remains correct.
+    empSheet.insertRowBefore(expenseHeaderRow);
+    empSheet.getRange(expenseHeaderRow, 1, 1, empRowData.length).setValues([empRowData]);
   }
 }
 
