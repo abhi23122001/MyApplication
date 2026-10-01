@@ -216,3 +216,57 @@ exports.saveEmployeeProfileAsAdmin = onCall(async (request) => {
 
   return { success: true, uid };
 });
+
+
+const SHEETS_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbxIkez5x0tAb7eSp2FgWBn43u-RKlz6Z997IHR7DtyqnblfIBOWBpeXRkSs1r8m6tfK/exec";
+
+exports.syncGoogleSheets = require("firebase-functions/v2/https").onRequest(async (req, res) => {
+  if (req.method !== "POST") {
+    return res.status(405).json({ status: "ERROR", message: "POST required" });
+  }
+
+  try {
+    const authorization = String(req.get("authorization") || "");
+    const match = authorization.match(/^Bearer\s+(.+)$/i);
+    if (!match) return res.status(401).json({ status: "ERROR", message: "Authentication required" });
+
+    const decoded = await adminAuth.verifyIdToken(match[1]);
+    await requireActiveAdmin(decoded.uid);
+
+    const response = await fetch(SHEETS_WEBHOOK_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(req.body || {})
+    });
+
+    const text = await response.text();
+    let body;
+    try {
+      body = JSON.parse(text);
+    } catch (_) {
+      body = { status: "ERROR", message: "Invalid response from Sheets backend" };
+    }
+
+    if (!response.ok || body.status !== "SUCCESS") {
+      logger.error("Google Sheets sync rejected", {
+        httpStatus: response.status,
+        responseStatus: body.status
+      });
+      return res.status(502).json({
+        status: "ERROR",
+        message: body.message || "Google Sheets sync failed"
+      });
+    }
+
+    return res.status(200).json(body);
+  } catch (error) {
+    if (error.code === "auth/id-token-expired" || error.code === "auth/argument-error") {
+      return res.status(401).json({ status: "ERROR", message: "Invalid authentication token" });
+    }
+    if (error instanceof HttpsError && error.code === "permission-denied") {
+      return res.status(403).json({ status: "ERROR", message: error.message });
+    }
+    logger.error("Google Sheets proxy failed", error);
+    return res.status(500).json({ status: "ERROR", message: "Google Sheets sync unavailable" });
+  }
+});
