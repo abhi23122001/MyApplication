@@ -1,6 +1,7 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
 const { logger } = require("firebase-functions");
+const { defineSecret } = require("firebase-functions/params");
 const { initializeApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
@@ -219,8 +220,9 @@ exports.saveEmployeeProfileAsAdmin = onCall(async (request) => {
 
 
 const SHEETS_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbxIkez5x0tAb7eSp2FgWBn43u-RKlz6Z997IHR7DtyqnblfIBOWBpeXRkSs1r8m6tfK/exec";
+const SHEETS_WEBHOOK_KEY = defineSecret("SHEETS_WEBHOOK_KEY");
 
-exports.syncGoogleSheets = require("firebase-functions/v2/https").onRequest(async (req, res) => {
+exports.syncGoogleSheets = require("firebase-functions/v2/https").onRequest({ secrets: [SHEETS_WEBHOOK_KEY] }, async (req, res) => {
   if (req.method !== "POST") {
     return res.status(405).json({ status: "ERROR", message: "POST required" });
   }
