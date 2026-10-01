@@ -67,11 +67,19 @@ function doGet(e) {
 
 function isAuthorizedWebhook_(e) {
   var provided = e && e.parameter ? String(e.parameter.webhookKey || "") : "";
+  if (!provided && e && e.postData && e.postData.contents) {
+    try { provided = String((JSON.parse(e.postData.contents) || {}).webhookKey || ""); } catch (_) {}
+  }
   var expected = String(PropertiesService.getScriptProperties().getProperty("ERP_WEBHOOK_KEY") || "");
   return expected !== "" && provided !== "" && provided === expected;
 }
 
 function doPost(e) {
+  if (!isAuthorizedWebhook_(e)) {
+    return ContentService.createTextOutput(JSON.stringify({ status: "ERROR", message: "Unauthorized" }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
   var lock = LockService.getScriptLock();
   try {
     lock.waitLock(30000); // 30 seconds wait lock for thread safety
