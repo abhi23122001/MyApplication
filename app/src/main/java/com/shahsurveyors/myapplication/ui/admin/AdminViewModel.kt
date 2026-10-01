@@ -45,6 +45,46 @@ class AdminViewModel(
     var presentCount by mutableIntStateOf(0); private set
     var absentCount by mutableIntStateOf(0); private set
 
+    private val dataSyncRepository = DataSyncRepository(firestore)
+    var showSyncDialog by mutableStateOf(false); private set
+    var isSyncingToSheets by mutableStateOf(false); private set
+    var syncProgressStatus by mutableStateOf("Preparing sync..."); private set
+    var syncProgressPercent by mutableStateOf(0f); private set
+    var lastSyncResult by mutableStateOf<SyncResult?>(null); private set
+
+    fun syncAllDataToGoogleSheets() {
+        if (isSyncingToSheets) return
+        showSyncDialog = true
+        isSyncingToSheets = true
+        syncProgressStatus = "Preparing Google Sheets sync..."
+        syncProgressPercent = 0f
+        lastSyncResult = null
+        viewModelScope.launch {
+            try {
+                lastSyncResult = dataSyncRepository.syncAllFirestoreDataToGoogleSheets { status, progress ->
+                    syncProgressStatus = status
+                    syncProgressPercent = progress.coerceIn(0f, 1f)
+                }
+            } catch (e: Exception) {
+                lastSyncResult = SyncResult(
+                    isSuccess = false,
+                    message = e.localizedMessage ?: "Google Sheets sync failed"
+                )
+            } finally {
+                isSyncingToSheets = false
+            }
+        }
+    }
+
+    fun dismissSyncDialog() {
+        if (!isSyncingToSheets) {
+            showSyncDialog = false
+            lastSyncResult = null
+            syncProgressStatus = ""
+            syncProgressPercent = 0f
+        }
+    }
+
     val companyProfile: StateFlow<CompanyProfile?> = billingRepository.companyProfile.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
     val bankDetails: StateFlow<BankDetails?> = billingRepository.bankDetails.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
     val allTerms: StateFlow<List<TermConditionEntity>> = billingRepository.allTerms.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
