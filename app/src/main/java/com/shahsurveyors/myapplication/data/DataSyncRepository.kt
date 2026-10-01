@@ -276,6 +276,8 @@ class DataSyncRepository(
                     allPayloads.add(
                         mapOf(
                             "action" to "LEAVE_SYNC",
+                            "leaveId" to doc.id,
+                            "id" to doc.id,
                             "staffName" to name,
                             "EmployeeName" to name,
                             "EmployeeID" to empId,
@@ -321,6 +323,8 @@ class DataSyncRepository(
                     allPayloads.add(
                         mapOf(
                             "action" to "ADVANCE_SALARY_SYNC",
+                            "advanceId" to doc.id,
+                            "id" to doc.id,
                             "staffName" to name,
                             "EmployeeName" to name,
                             "EmployeeID" to empId,
@@ -438,6 +442,8 @@ class DataSyncRepository(
                     allPayloads.add(
                         mapOf(
                             "action" to "DSR_SYNC",
+                            "dsrId" to doc.id,
+                            "id" to doc.id,
                             "date" to date,
                             "staffName" to name,
                             "EmployeeName" to name,
