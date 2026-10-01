@@ -65,6 +65,12 @@ function doGet(e) {
 // 2. POST HANDLER (Main Action Router)
 // =========================================================================
 
+function isAuthorizedWebhook_(e) {
+  var provided = e && e.parameter ? String(e.parameter.webhookKey || "") : "";
+  var expected = String(PropertiesService.getScriptProperties().getProperty("ERP_WEBHOOK_KEY") || "");
+  return expected !== "" && provided !== "" && provided === expected;
+}
+
 function doPost(e) {
   var lock = LockService.getScriptLock();
   try {
