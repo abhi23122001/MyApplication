@@ -1,6 +1,7 @@
 package com.shahsurveyors.myapplication.data
 
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.auth.FirebaseAuth
 import com.shahsurveyors.myapplication.network.RetrofitClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
@@ -471,6 +472,12 @@ class DataSyncRepository(
                 )
             }
 
+            val currentUser = FirebaseAuth.getInstance().currentUser
+                ?: return@withContext SyncResult(totalRecords = 0, isSuccess = false, message = "Admin authentication required.")
+            val idToken = currentUser.getIdToken(true).await().token
+                ?: return@withContext SyncResult(totalRecords = 0, isSuccess = false, message = "Unable to obtain Firebase authentication token.")
+            val authorization = "Bearer $idToken"
+
             onProgress("Transmitting $total records to Google Sheets in high-speed batches...", 0.90f)
 
             // 8. Bulk transmit in chunks of 50 to Google Apps Script Webhook
@@ -484,7 +491,7 @@ class DataSyncRepository(
                 )
 
                 try {
-                    val response = RetrofitClient.api.handleAction(batchPayload)
+                    val response = RetrofitClient.api.handleAction(authorization, batchPayload)
                     val status = response["status"]?.toString()?.uppercase()
                     if (status != "SUCCESS") throw IllegalStateException("Bulk sync rejected: " + (response["message"] ?: "unknown server response"))
                     transmittedCount += ((response["processedCount"] as? Number)?.toInt() ?: chunk.size)
@@ -492,7 +499,7 @@ class DataSyncRepository(
                     // Fallback to sending one-by-one if bulk format encounters any proxy issue
                     for (singleItem in chunk) {
                         try {
-                            val response = RetrofitClient.api.handleAction(singleItem)
+                            val response = RetrofitClient.api.handleAction(authorization, singleItem)
                             if (response["status"]?.toString()?.uppercase() == "SUCCESS") transmittedCount++
                             else syncErrors.add("record: " + (response["message"] ?: "server rejected record"))
                         } catch (singleErr: Exception) {
