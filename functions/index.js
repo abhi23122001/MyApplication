@@ -237,7 +237,7 @@ exports.syncGoogleSheets = require("firebase-functions/v2/https").onRequest({ se
 
     const response = await fetch(SHEETS_WEBHOOK_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-ERP-Webhook-Key": SHEETS_WEBHOOK_KEY.value() },
       body: JSON.stringify(req.body || {})
     });
 
