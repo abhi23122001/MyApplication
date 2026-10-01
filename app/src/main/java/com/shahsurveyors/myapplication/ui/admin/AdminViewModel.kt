@@ -71,11 +71,17 @@ class AdminViewModel(
     private suspend fun loadTodayAttendance() {
         val attendanceList = try { attendanceRepository.getTodayAllAttendance() } catch (_: Exception) { emptyList() }
         val sortedAttendance = attendanceList.sortedByDescending { it.punchInTime?.seconds ?: 0L }
-        attendanceSummary = sortedAttendance; presentCount = sortedAttendance.size
+        attendanceSummary = sortedAttendance
+        presentCount = sortedAttendance.count { it.status.equals("PRESENT", ignoreCase = true) }
         val existingUids = allEmployees.map { it.uid }.toHashSet()
         val missingProfiles = sortedAttendance.filter { it.uid.isNotBlank() && it.uid !in existingUids }.map { UserProfile(uid = it.uid, name = it.userName, role = "employee", approved = true, active = true) }
         if (missingProfiles.isNotEmpty()) allEmployees = allEmployees + missingProfiles
-        absentCount = (allEmployees.count { it.active } - presentCount).coerceAtLeast(0)
+        val activeEmployeeUids = allEmployees.filter { it.active }.map { it.uid }.toSet()
+        val presentEmployeeUids = sortedAttendance
+            .filter { it.status.equals("PRESENT", ignoreCase = true) && it.uid in activeEmployeeUids }
+            .map { it.uid }
+            .toSet()
+        absentCount = (activeEmployeeUids.size - presentEmployeeUids.size).coerceAtLeast(0)
     }
 
     fun refreshAttendance() { if (isLoading) return; viewModelScope.launch { isLoading = true; try { allEmployees = userRepository.getAllEmployees(); loadTodayAttendance() } catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to refresh attendance" } finally { isLoading = false } } }
