@@ -306,13 +306,13 @@ function buildEmployeeSheetLayout(sheet, empId, empName, meta) {
   sheet.setRowHeight(10, 24);
 
   // 6. Pre-set Border Grid for Attendance Rows 11-60
-  var attDataGrid = sheet.getRange(11, 1, 50, 8);
+  var attDataGrid = sheet.getRange(11, 1, 51, 8);
   attDataGrid.setBorder(true, true, true, true, true, true, "#E0E0E0", SpreadsheetApp.BorderStyle.SOLID);
-  sheet.getRange(11, 3, 50, 1).setHorizontalAlignment("center").setFontWeight("bold"); // Status Col Center
-  sheet.getRange(11, 1, 50, 1).setHorizontalAlignment("center"); // Date Col Center
+  sheet.getRange(11, 3, 51, 1).setHorizontalAlignment("center").setFontWeight("bold"); // Status Col Center
+  sheet.getRange(11, 1, 51, 1).setHorizontalAlignment("center"); // Date Col Center
 
   // 7. Conditional Formatting Rules for Status Column (C11:C60)
-  var statusRange = sheet.getRange("C11:C60");
+  var statusRange = sheet.getRange("C11:C61");
   var rulePresent = SpreadsheetApp.newConditionalFormatRule()
     .whenTextEqualTo("P")
     .setBackground("#C8E6C9")
