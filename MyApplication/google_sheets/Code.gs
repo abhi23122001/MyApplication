@@ -649,21 +649,27 @@ function handleExpenseDelete(ss, data) {
  */
 function handleLeaveSync(ss, data) {
   var masterLve = getOrCreateMasterSheet(ss, "Leaves", [
-    "Timestamp", "Employee ID", "Employee Name", "Start Date", "End Date",
+    "Timestamp", "Leave ID", "Employee ID", "Employee Name", "Start Date", "End Date",
     "Total Days", "Leave Type", "Reason", "Status"
   ], "#6A1B9A");
-
-  masterLve.appendRow([
-    new Date(),
-    data.EmployeeID || data.employeeId || data.empId || "EMP001",
+  var leaveId = (data.leaveId || data.id || "").toString().trim();
+  var empId = data.EmployeeID || data.employeeId || data.empId || "EMP001";
+  var row = [
+    new Date(), leaveId, empId,
     data.EmployeeName || data.staffName || data.name || "Employee",
-    data.startDate || "",
-    data.endDate || "",
-    data.totalDays || 1,
-    data.leaveType || "CASUAL",
-    data.reason || "",
-    data.status || "PENDING"
-  ]);
+    data.startDate || "", data.endDate || "", data.totalDays || 1,
+    data.leaveType || "CASUAL", data.reason || "", data.status || "PENDING"
+  ];
+  if (leaveId) {
+    var values = masterLve.getDataRange().getValues();
+    for (var r = 1; r < values.length; r++) {
+      if ((values[r][1] || "").toString().trim() === leaveId) {
+        masterLve.getRange(r + 1, 1, 1, row.length).setValues([row]);
+        return;
+      }
+    }
+  }
+  masterLve.appendRow(row);
 }
 
 /**
@@ -671,21 +677,28 @@ function handleLeaveSync(ss, data) {
  */
 function handleAdvanceSalarySync(ss, data) {
   var masterAdv = getOrCreateMasterSheet(ss, "Advances", [
-    "Timestamp", "Employee ID", "Employee Name", "Requested Month",
+    "Timestamp", "Advance ID", "Employee ID", "Employee Name", "Requested Month",
     "Requested Amount", "Approved Amount", "Installments", "Reason", "Status"
   ], "#E65100");
-
-  masterAdv.appendRow([
-    new Date(),
-    data.EmployeeID || data.employeeId || data.empId || "EMP001",
+  var advanceId = (data.advanceId || data.id || "").toString().trim();
+  var empId = data.EmployeeID || data.employeeId || data.empId || "EMP001";
+  var row = [
+    new Date(), advanceId, empId,
     data.EmployeeName || data.staffName || data.name || "Employee",
-    data.requestedMonth || "",
-    parseFloat(data.requestedAmount) || 0.0,
-    parseFloat(data.approvedAmount) || 0.0,
-    parseInt(data.installments) || 1,
-    data.reason || "",
-    data.status || "PENDING"
-  ]);
+    data.requestedMonth || "", parseFloat(data.requestedAmount) || 0.0,
+    parseFloat(data.approvedAmount) || 0.0, parseInt(data.installments) || 1,
+    data.reason || "", data.status || "PENDING"
+  ];
+  if (advanceId) {
+    var values = masterAdv.getDataRange().getValues();
+    for (var r = 1; r < values.length; r++) {
+      if ((values[r][1] || "").toString().trim() === advanceId) {
+        masterAdv.getRange(r + 1, 1, 1, row.length).setValues([row]);
+        return;
+      }
+    }
+  }
+  masterAdv.appendRow(row);
 }
 
 /**
@@ -742,21 +755,27 @@ function handlePayrollSync(ss, data) {
  */
 function handleDsrSync(ss, data) {
   var masterDsr = getOrCreateMasterSheet(ss, "DSR", [
-    "Timestamp", "Date", "Employee ID", "Employee Name",
+    "Timestamp", "DSR ID", "Date", "Employee ID", "Employee Name",
     "Chainage", "Points", "Area", "Instrument", "Remarks"
   ], "#37474F");
-
-  masterDsr.appendRow([
-    new Date(),
-    formatDate(data.date || new Date()),
-    data.EmployeeID || data.employeeId || data.empId || "EMP001",
+  var dsrId = (data.dsrId || data.id || "").toString().trim();
+  var empId = data.EmployeeID || data.employeeId || data.empId || "EMP001";
+  var row = [
+    new Date(), dsrId, formatDate(data.date || new Date()), empId,
     data.EmployeeName || data.staffName || data.name || "Employee",
-    data.chainage || "",
-    data.points || "",
-    data.area || "",
-    data.instrument || "",
-    data.remarks || ""
-  ]);
+    data.chainage || "", data.points || "", data.area || "",
+    data.instrument || "", data.remarks || ""
+  ];
+  if (dsrId) {
+    var values = masterDsr.getDataRange().getValues();
+    for (var r = 1; r < values.length; r++) {
+      if ((values[r][1] || "").toString().trim() === dsrId) {
+        masterDsr.getRange(r + 1, 1, 1, row.length).setValues([row]);
+        return;
+      }
+    }
+  }
+  masterDsr.appendRow(row);
 }
 
 // =========================================================================
