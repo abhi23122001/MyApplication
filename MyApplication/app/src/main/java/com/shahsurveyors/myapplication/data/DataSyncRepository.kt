@@ -35,6 +35,7 @@ class DataSyncRepository(
         var payCount = 0
         var dsrCount = 0
         val allPayloads = mutableListOf<Map<String, Any>>()
+        val syncErrors = mutableListOf<String>()
 
         try {
             onProgress("Connecting to Firebase Firestore...", 0.05f)
@@ -85,7 +86,7 @@ class DataSyncRepository(
                     )
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
+                syncErrors.add("sync: " + (e.localizedMessage ?: "read failed"))
             }
 
             onProgress("Fetching attendance punch logs...", 0.15f)
@@ -276,6 +277,8 @@ class DataSyncRepository(
                     allPayloads.add(
                         mapOf(
                             "action" to "LEAVE_SYNC",
+                            "leaveId" to doc.id,
+                            "id" to doc.id,
                             "staffName" to name,
                             "EmployeeName" to name,
                             "EmployeeID" to empId,
@@ -321,6 +324,8 @@ class DataSyncRepository(
                     allPayloads.add(
                         mapOf(
                             "action" to "ADVANCE_SALARY_SYNC",
+                            "advanceId" to doc.id,
+                            "id" to doc.id,
                             "staffName" to name,
                             "EmployeeName" to name,
                             "EmployeeID" to empId,
@@ -400,43 +405,6 @@ class DataSyncRepository(
                     payCount++
                 }
 
-                // If payrollRecords was empty, auto-generate standard baseline rows for users so Master_Payroll is populated
-                if (payCount == 0 && userMap.isNotEmpty()) {
-                    val currentMonth = SimpleDateFormat("yyyy-MM", Locale.ENGLISH).format(Date())
-                    for ((_, user) in userMap) {
-                        val userName = user["name"] as? String ?: "Employee"
-                        val userEmpId = user["empId"] as? String ?: "EMP001"
-                        val userDept = user["dept"] as? String ?: "SURVEY"
-                        val userRole = user["role"] as? String ?: "STAFF"
-                        val userSal = user["salary"] as? Double ?: 15000.0
-
-                        allPayloads.add(
-                            mapOf(
-                                "action" to "SYNC_PAYROLL",
-                                "month" to currentMonth,
-                                "staffName" to userName,
-                                "EmployeeName" to userName,
-                                "EmployeeID" to userEmpId,
-                                "department" to userDept,
-                                "role" to userRole,
-                                "baseMonthlySalary" to userSal,
-                                "dailyRate" to (userSal / 26.0),
-                                "totalDaysInMonth" to 30,
-                                "workingDaysInMonth" to 26,
-                                "presentDays" to 22,
-                                "halfDays" to 0,
-                                "approvedLeaveDays" to 1,
-                                "absentDays" to 3,
-                                "grossSalaryEarned" to (userSal * 22 / 26.0),
-                                "advanceDeduction" to 0.0,
-                                "absenceDeduction" to (userSal * 3 / 26.0),
-                                "netSalary" to (userSal * 22 / 26.0),
-                                "status" to "CALCULATED"
-                            )
-                        )
-                        payCount++
-                    }
-                }
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -475,6 +443,8 @@ class DataSyncRepository(
                     allPayloads.add(
                         mapOf(
                             "action" to "DSR_SYNC",
+                            "dsrId" to doc.id,
+                            "id" to doc.id,
                             "date" to date,
                             "staffName" to name,
                             "EmployeeName" to name,
@@ -514,14 +484,17 @@ class DataSyncRepository(
                 )
 
                 try {
-                    RetrofitClient.api.handleAction(batchPayload)
-                    transmittedCount += chunk.size
+                    val response = RetrofitClient.api.handleAction(batchPayload)
+                    val status = response["status"]?.toString()?.uppercase()
+                    if (status != "SUCCESS") throw IllegalStateException("Bulk sync rejected: " + (response["message"] ?: "unknown server response"))
+                    transmittedCount += ((response["processedCount"] as? Number)?.toInt() ?: chunk.size)
                 } catch (batchErr: Exception) {
                     // Fallback to sending one-by-one if bulk format encounters any proxy issue
                     for (singleItem in chunk) {
                         try {
-                            RetrofitClient.api.handleAction(singleItem)
-                            transmittedCount++
+                            val response = RetrofitClient.api.handleAction(singleItem)
+                            if (response["status"]?.toString()?.uppercase() == "SUCCESS") transmittedCount++
+                            else syncErrors.add("record: " + (response["message"] ?: "server rejected record"))
                         } catch (singleErr: Exception) {
                             singleErr.printStackTrace()
                         }
@@ -542,8 +515,8 @@ class DataSyncRepository(
                 advanceCount = advCount,
                 payrollCount = payCount,
                 dsrCount = dsrCount,
-                isSuccess = true,
-                message = "Successfully synced $transmittedCount historical records to Google Sheets (Master sheets & Employee tabs created)."
+                isSuccess = syncErrors.isEmpty(),
+                message = if (syncErrors.isEmpty()) "Successfully synced $transmittedCount historical records to Google Sheets (Master sheets & Employee tabs created)." else "Synced $transmittedCount records with " + syncErrors.size + " error(s)."
             )
 
         } catch (e: Exception) {
