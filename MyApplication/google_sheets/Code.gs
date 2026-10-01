@@ -13,7 +13,7 @@
  *        • Total Absent: =COUNTIF(C11:C60, "A")
  *        • Total Half Day: =COUNTIF(C11:C60, "HF")
  *        • Total Working Days: =COUNTIF(C11:C60, "P") + (COUNTIF(C11:C60, "HF")*0.5)
- *        • Attendance %: =IF(COUNTA(A11:A60)>0, ROUND(((COUNTIF(C11:C60, "P") + (COUNTIF(C11:C60, "HF")*0.5))/COUNTA(A11:A60))*100, 1) & "%", "0%")
+ *        • Attendance %: =IF(COUNTA(A11:A61)>0, ROUND(((COUNTIF(C11:C60, "P") + (COUNTIF(C11:C60, "HF")*0.5))/COUNTA(A11:A60))*100, 1) & "%", "0%")
  *    - Attendance Table (Row 10): Date | Day | Status (P/A/HF) | Check In | Check Out | Working Hours | Site | Remarks
  *    - Conditional Formatting on Status (P = Light Green, A = Light Red, HF = Light Amber)
  *    - Expense Table (Row 63): Date | Expense ID | Category | Description | Amount | Payment Mode | Status | Receipt Link
@@ -270,10 +270,10 @@ function buildEmployeeSheetLayout(sheet, empId, empName, meta) {
 
   // 3. Monthly Attendance KPI Summary Card (Rows 3-7, Cols F-G)
   var kpiConfig = [
-    ["Total Present:", "=COUNTIF(C11:C60, \"P\")", "#E8F5E9", "#1B5E20"],
-    ["Total Absent:", "=COUNTIF(C11:C60, \"A\")", "#FFEBEE", "#C62828"],
-    ["Total Half Day:", "=COUNTIF(C11:C60, \"HF\")", "#FFF8E1", "#F57F17"],
-    ["Total Working Days:", "=COUNTIF(C11:C60, \"P\") + (COUNTIF(C11:C60, \"HF\")*0.5)", "#E0F2F1", "#004D40"],
+    ["Total Present:", "=COUNTIF(C11:C61, \"P\")", "#E8F5E9", "#1B5E20"],
+    ["Total Absent:", "=COUNTIF(C11:C61, \"A\")", "#FFEBEE", "#C62828"],
+    ["Total Half Day:", "=COUNTIF(C11:C61, \"HF\")", "#FFF8E1", "#F57F17"],
+    ["Total Working Days:", "=COUNTIF(C11:C61, \"P\") + (COUNTIF(C11:C61, \"HF\")*0.5)", "#E0F2F1", "#004D40"],
     ["Attendance %:", "=IF(COUNTA(A11:A60)>0, ROUND(((COUNTIF(C11:C60, \"P\") + (COUNTIF(C11:C60, \"HF\")*0.5))/COUNTA(A11:A60))*100, 1) & \"%\", \"0%\")", "#EDE7F6", "#311B92"]
   ];
 
