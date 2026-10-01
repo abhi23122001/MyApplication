@@ -43,19 +43,12 @@ function doGet(e) {
   var action = (e && e.parameter && e.parameter.action) ? e.parameter.action : "";
   var ss = SpreadsheetApp.getActiveSpreadsheet();
 
+  // Never expose attendance/expense data through an unauthenticated GET request.
+  // Android backfill uses POST/BULK_SYNC, so this public read endpoint is disabled.
   if (action === "FETCH_ALL_SYNC_DATA") {
-    var attSheet = ss.getSheetByName("Attendance") || ss.getSheetByName("Master_Attendance");
-    var expSheet = ss.getSheetByName("Expenses") || ss.getSheetByName("Master_Expenses");
-    
-    var attendanceData = attSheet ? attSheet.getDataRange().getValues() : [];
-    var expensesData = expSheet ? expSheet.getDataRange().getValues() : [];
-    
     return ContentService.createTextOutput(JSON.stringify({
-      status: "SUCCESS",
-      attendanceCount: attendanceData.length > 1 ? attendanceData.length - 1 : 0,
-      expenseCount: expensesData.length > 1 ? expensesData.length - 1 : 0,
-      attendance: attendanceData,
-      expenses: expensesData
+      status: "ERROR",
+      message: "Data export through GET is disabled"
     })).setMimeType(ContentService.MimeType.JSON);
   }
 
@@ -116,8 +109,7 @@ function doPost(e) {
   } catch (err) {
     return ContentService.createTextOutput(JSON.stringify({
       status: "ERROR",
-      message: err.toString(),
-      stack: err.stack
+      message: "Request could not be processed"
     })).setMimeType(ContentService.MimeType.JSON);
   } finally {
     lock.releaseLock();
@@ -174,11 +166,14 @@ function routeAction(ss, data) {
       break;
 
     default:
-      // Fallback for legacy attendance punch
+      // Fallback for legacy attendance payloads only when it clearly contains
+      // attendance fields; otherwise reject unknown actions instead of silently
+      // reporting success.
       if (data.staffName || data.EmployeeName || data.punchType) {
         handleAttendancePunch(ss, data);
+        break;
       }
-      break;
+      throw new Error("Unsupported action: " + action);
   }
 }
 
