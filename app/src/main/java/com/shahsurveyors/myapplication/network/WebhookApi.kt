@@ -11,8 +11,9 @@ import retrofit2.http.Query
  */
 interface WebhookApi {
 
-    @POST("exec")
+    @POST("syncGoogleSheets")
     suspend fun handleAction(
+        @retrofit2.http.Header("Authorization") authorization: String,
         @Body payload: Map<String, Any>
     ): Map<String, Any>
 
