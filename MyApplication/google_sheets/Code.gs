@@ -391,6 +391,18 @@ function findExpenseHeaderRow(sheet) {
   return 62;
 }
 
+function refreshAttendanceKpiFormulas_(sheet) {
+  var expenseHeaderRow = findExpenseHeaderRow(sheet);
+  var attendanceEndRow = Math.max(61, expenseHeaderRow - 1);
+  var statusRange = "C11:C" + attendanceEndRow;
+  var dateRange = "A11:A" + attendanceEndRow;
+  sheet.getRange("G3").setFormula("=COUNTIF(" + statusRange + ", \\"P\\")");
+  sheet.getRange("G4").setFormula("=COUNTIF(" + statusRange + ", \\"A\\")");
+  sheet.getRange("G5").setFormula("=COUNTIF(" + statusRange + ", \\"HF\\")");
+  sheet.getRange("G6").setFormula("=COUNTIF(" + statusRange + ", \\"P\\") + (COUNTIF(" + statusRange + ", \\"HF\\")*0.5)");
+  sheet.getRange("G7").setFormula("=IF(COUNTA(" + dateRange + ")>0, ROUND(((COUNTIF(" + statusRange + ", \\"P\\") + (COUNTIF(" + statusRange + ", \\"HF\\")*0.5))/COUNTA(" + dateRange + "))*100, 1) & \\"%\\", \\"0%\\")");
+}
+
 function updateEmployeeInfoCard(sheet, empId, empName, meta) {
   if (empId) sheet.getRange("B3").setValue(empId);
   if (meta.joiningDate) sheet.getRange("D3").setValue(meta.joiningDate);
@@ -526,6 +538,7 @@ function handleAttendancePunch(ss, data) {
     empSheet.insertRowBefore(expenseHeaderRow);
     empSheet.getRange(expenseHeaderRow, 1, 1, empRowData.length).setValues([empRowData]);
   }
+  refreshAttendanceKpiFormulas_(empSheet);
 }
 
 /**
@@ -554,10 +567,13 @@ function handleAttendanceDelete(ss, data) {
   // 2. Clear from Employee Tab
   var empSheet = getOrCreateEmployeeSheet(ss, empId, empName);
   if (empSheet) {
-    var empValues = empSheet.getRange("A11:H60").getValues();
+    var expenseHeaderRow = findExpenseHeaderRow(empSheet);
+    var attendanceEndRow = Math.max(61, expenseHeaderRow - 1);
+    var empValues = empSheet.getRange(11, 1, attendanceEndRow - 10, 8).getValues();
     for (var k = 0; k < empValues.length; k++) {
       if (formatDate(empValues[k][0]) === dateStr) {
         empSheet.getRange(11 + k, 1, 1, 8).clearContent();
+        refreshAttendanceKpiFormulas_(empSheet);
       }
     }
   }
