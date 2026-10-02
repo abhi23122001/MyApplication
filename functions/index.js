@@ -73,39 +73,64 @@ async function sendNotification(data, sourceId, options = {}) {
   const title = String(data.title || "Shah ERP");
   const message = String(data.message || "New notification");
   const notificationId = String(sourceId || "");
-  if (recipients.length === 0) return { deliveryStatus: "NO_RECIPIENT", recipientCount: 0, tokenCount: 0, successCount: 0, failureCount: 0 };
+  if (recipients.length === 0) {
+    return { deliveryStatus: "NO_RECIPIENT", recipientCount: 0, tokenCount: 0, successCount: 0, failureCount: 0 };
+  }
 
   const tokenDocs = await Promise.all(recipients.map((uid) => db.collection("users").doc(uid).get()));
-  const tokens = tokenDocs.map((doc) => String(doc.get("fcmToken") || "").trim()).filter(Boolean);
-  if (tokens.length === 0) return { deliveryStatus: "NO_FCM_TOKEN", recipientCount: recipients.length, tokenCount: 0, successCount: 0, failureCount: 0 };
+  const recipientTokens = tokenDocs
+    .map((doc) => ({ uid: doc.id, token: String(doc.get("fcmToken") || "").trim() }))
+    .filter((item) => item.token);
 
-  const response = await getMessaging().sendEachForMulticast({
-    tokens,
-    notification: { title, body: message },
-    data: {
-      notificationId,
-      type: String(data.type || "GENERAL"),
-      referenceId: String(data.referenceId || notificationId),
-      route: String(data.route || "")
-    },
-    android: { priority: "high" }
-  });
+  if (recipientTokens.length === 0) {
+    return { deliveryStatus: "NO_FCM_TOKEN", recipientCount: recipients.length, tokenCount: 0, successCount: 0, failureCount: 0 };
+  }
+
+  let successCount = 0;
+  let failureCount = 0;
+  for (let i = 0; i < recipientTokens.length; i += 500) {
+    const chunk = recipientTokens.slice(i, i + 500);
+    const response = await getMessaging().sendEachForMulticast({
+      tokens: chunk.map((item) => item.token),
+      notification: { title, body: message },
+      data: {
+        notificationId,
+        type: String(data.type || "GENERAL"),
+        referenceId: String(data.referenceId || notificationId),
+        route: String(data.route || "")
+      },
+      android: { priority: "high" }
+    });
+    successCount += response.successCount;
+    failureCount += response.failureCount;
+  }
 
   if (options.persistCopies !== false) {
-    const batch = db.batch();
-    recipients.forEach((uid) => {
-      const ref = db.collection("notifications").doc();
-      batch.set(ref, {
-        type: String(data.type || "GENERAL"), title, message,
-        actorUid: String(data.actorUid || ""), actorName: String(data.actorName || ""),
-        referenceId: String(data.referenceId || notificationId), route: String(data.route || ""),
-        recipientUid: uid, read: false, fanout: true, sourceNotificationId: notificationId,
-        createdAt: data.createdAt || FieldValue.serverTimestamp()
+    // Firestore batch writes are limited to 500 operations.
+    for (let i = 0; i < recipients.length; i += 500) {
+      const chunk = recipients.slice(i, i + 500);
+      const batch = db.batch();
+      chunk.forEach((uid) => {
+        const ref = db.collection("notifications").doc();
+        batch.set(ref, {
+          type: String(data.type || "GENERAL"), title, message,
+          actorUid: String(data.actorUid || ""), actorName: String(data.actorName || ""),
+          referenceId: String(data.referenceId || notificationId), route: String(data.route || ""),
+          recipientUid: uid, read: false, fanout: true, sourceNotificationId: notificationId,
+          createdAt: data.createdAt || FieldValue.serverTimestamp()
+        });
       });
-    });
-    await batch.commit();
+      await batch.commit();
+    }
   }
-  return { deliveryStatus: "SENT", recipientCount: recipients.length, tokenCount: tokens.length, successCount: response.successCount, failureCount: response.failureCount };
+
+  return {
+    deliveryStatus: "SENT",
+    recipientCount: recipients.length,
+    tokenCount: recipientTokens.length,
+    successCount,
+    failureCount
+  };
 }
 
 exports.sendShahErpNotification = onDocumentCreated("notifications/{notificationId}", async (event) => {
