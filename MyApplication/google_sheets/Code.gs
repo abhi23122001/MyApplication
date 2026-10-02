@@ -823,7 +823,9 @@ function handleDsrSync(ss, data) {
 // =========================================================================
 
 function formatDate(val) {
-  if (!val) return Utilities.formatDate(new Date(), "Asia/Kolkata", "dd-MM-yyyy");
+  // Missing dates must stay missing. Returning today here can silently corrupt
+  // delete/sync operations by turning an absent date into the current date.
+  if (val === null || val === undefined || val.toString().trim() === "") return "";
   if (val instanceof Date) {
     return Utilities.formatDate(val, "Asia/Kolkata", "dd-MM-yyyy");
   }
