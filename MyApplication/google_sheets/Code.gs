@@ -453,8 +453,9 @@ function handleCreateEmployee(ss, data) {
  * Upserts to Master_Attendance AND to the dedicated EMPID_Employee_Name tab.
  */
 function handleAttendancePunch(ss, data) {
-  var empId = data.EmployeeID || data.employeeId || data.empId || "EMP001";
-  var empName = data.EmployeeName || data.staffName || data.name || "Employee";
+  var empId = (data.EmployeeID || data.employeeId || data.empId || "").toString().trim();
+  var empName = (data.EmployeeName || data.staffName || data.name || "").toString().trim();
+  if (!empId || !empName) throw new Error("Employee ID and Employee Name are required");
   var dateStr = formatDate(data.date || "");
   if (!dateStr) throw new Error("Attendance date is required");
   var dayName = data.day || getDayName(dateStr);
@@ -548,6 +549,7 @@ function handleAttendancePunch(ss, data) {
  */
 function handleAttendanceDelete(ss, data) {
   var empId = (data.EmployeeID || data.employeeId || data.empId || "").toString().trim();
+  if (!empId) throw new Error("Employee ID is required for attendance deletion");
   var empName = data.EmployeeName || data.staffName || data.name || "";
   var dateStr = formatDate(data.date || "");
 
@@ -661,7 +663,7 @@ function handleExpenseDelete(ss, data) {
   var empId = data.EmployeeID || data.employeeId || data.empId || "";
   var empName = data.EmployeeName || data.staffName || data.name || "";
 
-  if (!expenseId) return;
+  if (!expenseId) throw new Error("Expense ID is required for deletion");
 
   // 1. Master sheet
   var masterExp = ss.getSheetByName("Expenses") || ss.getSheetByName("Master_Expenses");
