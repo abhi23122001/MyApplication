@@ -489,13 +489,19 @@ class DataSyncRepository(
                 )
 
                 try {
-                    RetrofitClient.api.handleAction(requireSheetsAuthToken(), batchPayload)
-                    transmittedCount += chunk.size
+                    val response = RetrofitClient.api.handleAction(requireSheetsAuthToken(), batchPayload)
+                    require(response["status"]?.toString()?.equals("SUCCESS", ignoreCase = true) == true) {
+                        response["message"]?.toString() ?: "Google Sheets bulk sync failed"
+                    }
+                    transmittedCount += (response["processedCount"] as? Number)?.toInt()?.coerceAtMost(chunk.size) ?: chunk.size
                 } catch (batchErr: Exception) {
                     // Fallback to sending one-by-one if bulk format encounters any proxy issue
                     for (singleItem in chunk) {
                         try {
-                            RetrofitClient.api.handleAction(requireSheetsAuthToken(), singleItem)
+                            val response = RetrofitClient.api.handleAction(requireSheetsAuthToken(), singleItem)
+                            require(response["status"]?.toString()?.equals("SUCCESS", ignoreCase = true) == true) {
+                                response["message"]?.toString() ?: "Google Sheets record sync failed"
+                            }
                             transmittedCount++
                         } catch (singleErr: Exception) {
                             singleErr.printStackTrace()
