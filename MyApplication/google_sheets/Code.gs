@@ -199,7 +199,7 @@ function routeAction(ss, data) {
  * Sanitizes and generates tab name: EMPID_Employee_Name (e.g. EMP001_Rahul_Kumar)
  */
 function sanitizeEmployeeTabName(empId, empName) {
-  var cleanId = (empId || "EMP001").toString().trim().replace(/[:\\\/\?\*\[\]]/g, "_");
+  var cleanId = (empId || "").toString().trim().replace(/[:\\\/\?\*\[\]]/g, "_");
   var cleanName = (empName || "Staff").toString().trim()
     .replace(/[^a-zA-Z0-9]/g, "_")
     .replace(/_+/g, "_")
@@ -218,7 +218,7 @@ function sanitizeEmployeeTabName(empId, empName) {
 function getOrCreateEmployeeSheet(ss, empId, empName, metadata) {
   metadata = metadata || {};
   var targetTabName = sanitizeEmployeeTabName(empId, empName);
-  var targetPrefix = (empId || "EMP001").toString().trim().toUpperCase() + "_";
+  var targetPrefix = (empId || "").toString().trim().toUpperCase() + "_";
 
   // Check if sheet exists by exact name or prefix match
   var sheet = ss.getSheetByName(targetTabName);
@@ -263,9 +263,9 @@ function buildEmployeeSheetLayout(sheet, empId, empName, meta) {
   // 2. Employee Profile Info Card (Rows 3-6, Cols A-D)
   var infoLabels = [
     ["Employee ID:", empId || "EMP001", "Joining Date:", meta.joiningDate || "01-01-2025"],
-    ["Employee Name:", empName || "Employee", "Project / Site:", meta.siteName || meta.projectSite || "Main Site"],
-    ["Designation:", meta.designation || meta.role || "Surveyor", "Phone:", meta.phone || ""],
-    ["Status:", meta.status || "ACTIVE", "Department:", meta.department || "SURVEY"]
+    ["Employee Name:", empName || "", "Project / Site:", meta.siteName || meta.projectSite || ""],
+    ["Designation:", meta.designation || meta.role || "", "Phone:", meta.phone || ""],
+    ["Status:", meta.status || "", "Department:", meta.department || ""]
   ];
 
   for (var r = 0; r < infoLabels.length; r++) {
@@ -442,8 +442,9 @@ function getOrCreateMasterSheet(ss, sheetName, headers, headerColor) {
  * Handles CREATE_EMPLOYEE / SYNC_EMPLOYEE
  */
 function handleCreateEmployee(ss, data) {
-  var empId = data.EmployeeID || data.employeeId || data.empId || "EMP001";
-  var empName = data.EmployeeName || data.staffName || data.name || "Employee";
+  var empId = (data.EmployeeID || data.employeeId || data.empId || "").toString().trim();
+  var empName = (data.EmployeeName || data.staffName || data.name || "").toString().trim();
+  if (!empId || !empName) throw new Error("Employee ID and Employee Name are required");
   getOrCreateEmployeeSheet(ss, empId, empName, data);
 }
 
@@ -454,20 +455,21 @@ function handleCreateEmployee(ss, data) {
 function handleAttendancePunch(ss, data) {
   var empId = data.EmployeeID || data.employeeId || data.empId || "EMP001";
   var empName = data.EmployeeName || data.staffName || data.name || "Employee";
-  var dateStr = formatDate(data.date || new Date());
+  var dateStr = formatDate(data.date || "");
+  if (!dateStr) throw new Error("Attendance date is required");
   var dayName = data.day || getDayName(dateStr);
   var time = data.time || data.punchInTime || data.punchOutTime || "";
   var punchType = (data.punchType || data.type || data.action || "PUNCH_IN").toString().toUpperCase();
-  var site = data.siteName || data.workArea || data.site || "Main Site";
-  var remarks = data.remarks || "Mobile Punch";
+  var site = data.siteName || data.workArea || data.site || "";
+  var remarks = data.remarks || "";
   var mapsUrl = data.googleMapsUrl || data.mapsUrl || "";
   var lat = data.lat || data.Latitude || "";
   var lng = data.lng || data.Longitude || "";
   var coords = (lat && lng) ? (lat + ", " + lng) : "";
 
   // Normalize Status to P, A, HF
-  var rawStatus = (data.status || "PRESENT").toString().toUpperCase();
-  var status = "P";
+  var rawStatus = (data.status || "").toString().toUpperCase();
+  var status = rawStatus || "P";
   if (rawStatus.indexOf("HALF") !== -1 || rawStatus === "HF") {
     status = "HF";
   } else if (rawStatus.indexOf("ABSENT") !== -1 || rawStatus === "A") {
@@ -545,7 +547,7 @@ function handleAttendancePunch(ss, data) {
  * Handles ATTENDANCE_DELETE
  */
 function handleAttendanceDelete(ss, data) {
-  var empId = data.EmployeeID || data.employeeId || data.empId || "";
+  var empId = (data.EmployeeID || data.employeeId || data.empId || "").toString().trim();
   var empName = data.EmployeeName || data.staffName || data.name || "";
   var dateStr = formatDate(data.date || "");
 
@@ -584,15 +586,18 @@ function handleAttendanceDelete(ss, data) {
  * Upserts into Master_Expenses AND Employee Tab.
  */
 function handleExpenseSync(ss, data) {
-  var expenseId = data.expenseId || data.id || ("EXP_" + new Date().getTime());
-  var empId = data.EmployeeID || data.employeeId || data.empId || "EMP001";
-  var empName = data.EmployeeName || data.staffName || data.name || "Employee";
-  var dateStr = formatDate(data.date || new Date());
-  var category = data.category || "General";
-  var desc = data.description || data.remarks || data.title || "Expense";
+  var expenseId = (data.expenseId || data.id || "").toString().trim();
+  if (!expenseId) throw new Error("Expense ID is required");
+  var empId = (data.EmployeeID || data.employeeId || data.empId || "").toString().trim();
+  var empName = (data.EmployeeName || data.staffName || data.name || "").toString().trim();
+  if (!empId || !empName) throw new Error("Employee ID and Employee Name are required");
+  var dateStr = formatDate(data.date || "");
+  if (!dateStr) throw new Error("Expense date is required");
+  var category = data.category || "";
+  var desc = data.description || data.remarks || data.title || "";
   var amount = parseFloat(data.amount) || 0.0;
-  var paymentMode = data.paymentMode || "UPI / Cash";
-  var status = (data.status || "PENDING").toString().toUpperCase();
+  var paymentMode = data.paymentMode || "";
+  var status = (data.status || "").toString().toUpperCase();
   var receiptUrl = data.receiptUrl || "";
 
   // 1. UPDATE MASTER EXPENSES SHEET
@@ -693,12 +698,13 @@ function handleLeaveSync(ss, data) {
     "Total Days", "Leave Type", "Reason", "Status"
   ], "#6A1B9A");
   var leaveId = (data.leaveId || data.id || "").toString().trim();
-  var empId = data.EmployeeID || data.employeeId || data.empId || "EMP001";
+  var empId = (data.EmployeeID || data.employeeId || data.empId || "").toString().trim();
+  if (!leaveId || !empId) throw new Error("Leave ID and Employee ID are required");
   var row = [
     new Date(), leaveId, empId,
-    data.EmployeeName || data.staffName || data.name || "Employee",
-    data.startDate || "", data.endDate || "", data.totalDays || 1,
-    data.leaveType || "CASUAL", data.reason || "", data.status || "PENDING"
+    data.EmployeeName || data.staffName || data.name || "",
+    data.startDate || "", data.endDate || "", data.totalDays || 0,
+    data.leaveType || "", data.reason || "", data.status || "PENDING"
   ];
   if (leaveId) {
     var values = masterLve.getDataRange().getValues();
@@ -721,12 +727,13 @@ function handleAdvanceSalarySync(ss, data) {
     "Requested Amount", "Approved Amount", "Installments", "Reason", "Status"
   ], "#E65100");
   var advanceId = (data.advanceId || data.id || "").toString().trim();
-  var empId = data.EmployeeID || data.employeeId || data.empId || "EMP001";
+  var empId = (data.EmployeeID || data.employeeId || data.empId || "").toString().trim();
+  if (!advanceId || !empId) throw new Error("Advance ID and Employee ID are required");
   var row = [
     new Date(), advanceId, empId,
-    data.EmployeeName || data.staffName || data.name || "Employee",
+    data.EmployeeName || data.staffName || data.name || "",
     data.requestedMonth || "", parseFloat(data.requestedAmount) || 0.0,
-    parseFloat(data.approvedAmount) || 0.0, parseInt(data.installments) || 1,
+    parseFloat(data.approvedAmount) || 0.0, parseInt(data.installments) || 0,
     data.reason || "", data.status || "PENDING"
   ];
   if (advanceId) {
@@ -751,8 +758,9 @@ function handlePayrollSync(ss, data) {
     "Half Days", "Leave Days", "Absent Days", "Gross Salary", "Advance Cut", "Absent Cut", "Net Salary", "Status"
   ], "#00695C");
 
-  var empId = data.EmployeeID || data.employeeId || data.empId || "EMP001";
+  var empId = (data.EmployeeID || data.employeeId || data.empId || "").toString().trim();
   var month = data.month || data.salaryMonth || "";
+  if (!empId || !month) throw new Error("Payroll Employee ID and month are required");
   var values = masterPay.getDataRange().getValues();
   var foundRow = -1;
 
@@ -765,13 +773,13 @@ function handlePayrollSync(ss, data) {
 
   var row = [
     new Date(), month, empId,
-    data.EmployeeName || data.staffName || data.name || "Employee",
-    data.department || data.dept || "SURVEY",
-    data.role || "STAFF",
+    data.EmployeeName || data.staffName || data.name || "",
+    data.department || data.dept || "",
+    data.role || "",
     parseFloat(data.baseMonthlySalary) || 0,
     parseFloat(data.dailyRate) || 0,
-    parseInt(data.totalDaysInMonth) || 30,
-    parseInt(data.workingDaysInMonth) || 26,
+    parseInt(data.totalDaysInMonth) || 0,
+    parseInt(data.workingDaysInMonth) || 0,
     parseInt(data.presentDays) || 0,
     parseInt(data.halfDays) || 0,
     parseInt(data.approvedLeaveDays) || 0,
@@ -780,7 +788,7 @@ function handlePayrollSync(ss, data) {
     parseFloat(data.advanceDeduction) || 0,
     parseFloat(data.absenceDeduction) || 0,
     parseFloat(data.netSalary) || 0,
-    data.status || "CALCULATED"
+    data.status || ""
   ];
 
   if (foundRow > 0) {
@@ -799,9 +807,10 @@ function handleDsrSync(ss, data) {
     "Chainage", "Points", "Area", "Instrument", "Remarks"
   ], "#37474F");
   var dsrId = (data.dsrId || data.id || "").toString().trim();
-  var empId = data.EmployeeID || data.employeeId || data.empId || "EMP001";
+  var empId = (data.EmployeeID || data.employeeId || data.empId || "").toString().trim();
+  if (!dsrId || !empId) throw new Error("DSR ID and Employee ID are required");
   var row = [
-    new Date(), dsrId, formatDate(data.date || new Date()), empId,
+    new Date(), dsrId, formatDate(data.date || ""), empId,
     data.EmployeeName || data.staffName || data.name || "Employee",
     data.chainage || "", data.points || "", data.area || "",
     data.instrument || "", data.remarks || ""
@@ -843,7 +852,7 @@ function formatDate(val) {
 }
 
 function formatTime(val) {
-  if (!val) return "09:00 AM";
+  if (!val) return "";
   if (val instanceof Date) {
     return Utilities.formatDate(val, "Asia/Kolkata", "hh:mm a");
   }
