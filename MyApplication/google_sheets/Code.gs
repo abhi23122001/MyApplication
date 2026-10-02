@@ -456,7 +456,7 @@ function handleAttendancePunch(ss, data) {
   var empName = data.EmployeeName || data.staffName || data.name || "Employee";
   var dateStr = formatDate(data.date || new Date());
   var dayName = data.day || getDayName(dateStr);
-  var time = data.time || data.punchInTime || data.punchOutTime || formatTime(new Date());
+  var time = data.time || data.punchInTime || data.punchOutTime || "";
   var punchType = (data.punchType || data.type || data.action || "PUNCH_IN").toString().toUpperCase();
   var site = data.siteName || data.workArea || data.site || "Main Site";
   var remarks = data.remarks || "Mobile Punch";
@@ -474,9 +474,9 @@ function handleAttendancePunch(ss, data) {
     status = "A";
   }
 
-  var checkIn = data.checkIn || (punchType.indexOf("IN") !== -1 ? time : "09:00 AM");
-  var checkOut = data.checkOut || (punchType.indexOf("OUT") !== -1 ? time : "PENDING");
-  var workingHours = data.workingHours || (punchType.indexOf("OUT") !== -1 ? "8h 30m" : "In Progress");
+  var checkIn = data.checkIn || (punchType.indexOf("IN") !== -1 ? time : "");
+  var checkOut = data.checkOut || (punchType.indexOf("OUT") !== -1 ? time : "");
+  var workingHours = data.workingHours || "";
 
   // 1. UPDATE MASTER ATTENDANCE SHEET
   var masterAtt = getOrCreateMasterSheet(ss, "Attendance", [
