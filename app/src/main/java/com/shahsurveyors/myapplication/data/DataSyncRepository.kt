@@ -1,5 +1,6 @@
 package com.shahsurveyors.myapplication.data
 
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.shahsurveyors.myapplication.network.RetrofitClient
 import kotlinx.coroutines.Dispatchers
@@ -22,7 +23,8 @@ data class SyncResult(
 )
 
 class DataSyncRepository(
-    private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
+    private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance(),
+    private val auth: FirebaseAuth = FirebaseAuth.getInstance()
 ) {
 
     suspend fun syncAllFirestoreDataToGoogleSheets(
@@ -50,7 +52,7 @@ class DataSyncRepository(
                     val dept = doc.getString("department") ?: doc.getString("dept") ?: "SURVEY"
                     val role = doc.getString("role") ?: "STAFF"
                     val phone = doc.getString("phone") ?: ""
-                    val salary = doc.getDouble("monthlySalary") ?: doc.getDouble("salary") ?: 15000.0
+                    val salary = doc.getDouble("monthlySalary") ?: doc.getDouble("salary") ?: 0.0
                     val active = doc.getBoolean("active") ?: true
 
                     userMap[uid] = mapOf(
@@ -77,7 +79,7 @@ class DataSyncRepository(
                             "role" to role,
                             "department" to dept,
                             "phone" to phone,
-                            "joiningDate" to "01-01-2025",
+                            "joiningDate" to (doc.getString("joiningDate") ?: ""),
                             "siteName" to dept,
                             "projectSite" to dept,
                             "status" to if (active) "ACTIVE" else "INACTIVE"
@@ -116,7 +118,7 @@ class DataSyncRepository(
                         ?: doc.getString("employeeId")
                         ?: doc.getString("empId")
                         ?: cachedUser?.get("empId") as? String
-                        ?: "EMP001"
+                        ?: "UID_${uid.take(8)}"
 
                     val rawDate = doc.getString("date") ?: ""
                     var parsedDate: Date? = null
@@ -127,15 +129,15 @@ class DataSyncRepository(
                         } catch (_: Exception) {}
                     }
                     if (parsedDate == null) {
-                        parsedDate = Date()
+                        continue
                     }
 
                     val formattedDate = outputDateFormat.format(parsedDate)
                     val dayName = dayFormat.format(parsedDate)
 
-                    val time = doc.getString("time") ?: doc.getString("punchInTime") ?: doc.getString("punchOutTime") ?: "09:00 AM"
+                    val time = doc.getString("time") ?: doc.getString("punchInTime") ?: doc.getString("punchOutTime") ?: ""
                     val type = doc.getString("type") ?: doc.getString("action") ?: doc.getString("punchType") ?: "PUNCH_IN"
-                    val workArea = doc.getString("workArea") ?: doc.getString("siteName") ?: "Main Site / Field"
+                    val workArea = doc.getString("workArea") ?: doc.getString("siteName") ?: ""
                     val rawStatus = (doc.getString("status") ?: "PRESENT").uppercase()
 
                     // Standardize status code: P, A, HF
@@ -153,9 +155,9 @@ class DataSyncRepository(
                         doc.getString("googleMapsUrl") ?: doc.getString("mapsUrl") ?: ""
                     }
 
-                    val checkIn = if (type.contains("IN", ignoreCase = true)) time else "09:00 AM"
-                    val checkOut = if (type.contains("OUT", ignoreCase = true)) time else "PENDING"
-                    val workingHours = if (type.contains("OUT", ignoreCase = true)) "8h 30m" else "In Progress"
+                    val checkIn = if (type.contains("IN", ignoreCase = true)) time else ""
+                    val checkOut = if (type.contains("OUT", ignoreCase = true)) time else ""
+                    val workingHours = ""
 
                     allPayloads.add(
                         mapOf(
@@ -176,7 +178,7 @@ class DataSyncRepository(
                             "workArea" to workArea,
                             "siteName" to workArea,
                             "site" to workArea,
-                            "remarks" to "Verified Mobile Punch",
+                            "remarks" to (doc.getString("remarks") ?: ""),
                             "lat" to lat.toString(),
                             "lng" to lng.toString(),
                             "googleMapsUrl" to mapsUrl
@@ -206,8 +208,10 @@ class DataSyncRepository(
                         ?: cachedUser?.get("empId") as? String
                         ?: "EMP001"
 
-                    val submittedTs = doc.getLong("submittedAt") ?: doc.getLong("createdAt") ?: System.currentTimeMillis()
-                    val formattedDate = outputDateFormat.format(Date(submittedTs))
+                    val submittedTs = doc.getLong("submittedAt") ?: doc.getLong("createdAt")
+                    val dateText = doc.getString("date") ?: ""
+                    val formattedDate = submittedTs?.let { outputDateFormat.format(Date(it)) } ?: dateText
+                    if (formattedDate.isBlank()) continue
 
                     val title = doc.getString("title") ?: doc.getString("remarks") ?: "Field Expense"
                     val category = doc.getString("category") ?: "GENERAL"
@@ -231,7 +235,7 @@ class DataSyncRepository(
                             "remarks" to title,
                             "category" to category,
                             "amount" to amount,
-                            "paymentMode" to "UPI / Cash",
+                            "paymentMode" to (doc.getString("paymentMode") ?: ""),
                             "status" to status,
                             "receiptUrl" to receiptUrl
                         )
@@ -360,7 +364,8 @@ class DataSyncRepository(
                         ?: cachedUser?.get("empId") as? String
                         ?: "EMP001"
 
-                    val month = doc.getString("salaryMonth") ?: doc.getString("month") ?: SimpleDateFormat("yyyy-MM", Locale.ENGLISH).format(Date())
+                    val month = doc.getString("salaryMonth") ?: doc.getString("month") ?: ""
+                    if (month.isBlank()) continue
                     val dept = doc.getString("dept") ?: doc.getString("department") ?: "SURVEY"
                     val role = doc.getString("role") ?: "STAFF"
                     val baseSalary = doc.getDouble("baseMonthlySalary") ?: 15000.0
@@ -432,7 +437,8 @@ class DataSyncRepository(
                         ?: cachedUser?.get("empId") as? String
                         ?: "EMP001"
 
-                    val date = doc.getString("date") ?: SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH).format(Date())
+                    val date = doc.getString("date") ?: ""
+                    if (date.isBlank()) continue
                     val chainage = doc.getString("chainage") ?: ""
                     val points = doc.getString("points") ?: ""
                     val area = doc.getString("area") ?: ""
@@ -483,13 +489,13 @@ class DataSyncRepository(
                 )
 
                 try {
-                    RetrofitClient.api.handleAction(batchPayload)
+                    RetrofitClient.api.handleAction(requireSheetsAuthToken(), batchPayload)
                     transmittedCount += chunk.size
                 } catch (batchErr: Exception) {
                     // Fallback to sending one-by-one if bulk format encounters any proxy issue
                     for (singleItem in chunk) {
                         try {
-                            RetrofitClient.api.handleAction(singleItem)
+                            RetrofitClient.api.handleAction(requireSheetsAuthToken(), singleItem)
                             transmittedCount++
                         } catch (singleErr: Exception) {
                             singleErr.printStackTrace()
@@ -524,4 +530,11 @@ class DataSyncRepository(
             )
         }
     }
+    private suspend fun requireSheetsAuthToken(): String {
+        val user = auth.currentUser ?: throw IllegalStateException("Authentication required for Google Sheets sync")
+        val token = user.getIdToken(true).await().token
+        require(!token.isNullOrBlank()) { "Unable to obtain Firebase authentication token" }
+        return "Bearer $token"
+    }
 }
+
