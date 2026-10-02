@@ -9,7 +9,7 @@ import java.util.concurrent.TimeUnit
 object RetrofitClient {
 
     private const val BASE_URL =
-        "https://script.google.com/macros/s/AKfycbyvyVeBGYxs2U8-X9QoFK19e5ahe6VIa2hUxtYuml60X60BbczOMgYTJ38Pctvf_sQAqw/"
+        "https://us-central1-shah-surveyors-erp-652b0.cloudfunctions.net/"
 
     /**
      * HTTP logging is disabled.
