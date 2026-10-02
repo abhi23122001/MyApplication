@@ -105,7 +105,7 @@ class UserRepository(
     suspend fun getAllEmployees(): List<UserProfile> {
         requireAdminUid()
         return usersCollection.get().await().toObjects(UserProfile::class.java)
-            .filter { it.uid.isNotBlank() && it.active }
+            .filter { it.uid.isNotBlank() }
             .filter { !it.role.equals(FirebaseConstants.ROLE_ADMIN, ignoreCase = true) }
             .sortedBy { it.name.lowercase() }
     }

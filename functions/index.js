@@ -1,6 +1,7 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
 const { logger } = require("firebase-functions");
+const { defineSecret } = require("firebase-functions/params");
 const { initializeApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
@@ -72,39 +73,64 @@ async function sendNotification(data, sourceId, options = {}) {
   const title = String(data.title || "Shah ERP");
   const message = String(data.message || "New notification");
   const notificationId = String(sourceId || "");
-  if (recipients.length === 0) return { deliveryStatus: "NO_RECIPIENT", recipientCount: 0, tokenCount: 0, successCount: 0, failureCount: 0 };
+  if (recipients.length === 0) {
+    return { deliveryStatus: "NO_RECIPIENT", recipientCount: 0, tokenCount: 0, successCount: 0, failureCount: 0 };
+  }
 
   const tokenDocs = await Promise.all(recipients.map((uid) => db.collection("users").doc(uid).get()));
-  const tokens = tokenDocs.map((doc) => String(doc.get("fcmToken") || "").trim()).filter(Boolean);
-  if (tokens.length === 0) return { deliveryStatus: "NO_FCM_TOKEN", recipientCount: recipients.length, tokenCount: 0, successCount: 0, failureCount: 0 };
+  const recipientTokens = tokenDocs
+    .map((doc) => ({ uid: doc.id, token: String(doc.get("fcmToken") || "").trim() }))
+    .filter((item) => item.token);
 
-  const response = await getMessaging().sendEachForMulticast({
-    tokens,
-    notification: { title, body: message },
-    data: {
-      notificationId,
-      type: String(data.type || "GENERAL"),
-      referenceId: String(data.referenceId || notificationId),
-      route: String(data.route || "")
-    },
-    android: { priority: "high" }
-  });
+  if (recipientTokens.length === 0) {
+    return { deliveryStatus: "NO_FCM_TOKEN", recipientCount: recipients.length, tokenCount: 0, successCount: 0, failureCount: 0 };
+  }
+
+  let successCount = 0;
+  let failureCount = 0;
+  for (let i = 0; i < recipientTokens.length; i += 500) {
+    const chunk = recipientTokens.slice(i, i + 500);
+    const response = await getMessaging().sendEachForMulticast({
+      tokens: chunk.map((item) => item.token),
+      notification: { title, body: message },
+      data: {
+        notificationId,
+        type: String(data.type || "GENERAL"),
+        referenceId: String(data.referenceId || notificationId),
+        route: String(data.route || "")
+      },
+      android: { priority: "high" }
+    });
+    successCount += response.successCount;
+    failureCount += response.failureCount;
+  }
 
   if (options.persistCopies !== false) {
-    const batch = db.batch();
-    recipients.forEach((uid) => {
-      const ref = db.collection("notifications").doc();
-      batch.set(ref, {
-        type: String(data.type || "GENERAL"), title, message,
-        actorUid: String(data.actorUid || ""), actorName: String(data.actorName || ""),
-        referenceId: String(data.referenceId || notificationId), route: String(data.route || ""),
-        recipientUid: uid, read: false, fanout: true, sourceNotificationId: notificationId,
-        createdAt: data.createdAt || FieldValue.serverTimestamp()
+    // Firestore batch writes are limited to 500 operations.
+    for (let i = 0; i < recipients.length; i += 500) {
+      const chunk = recipients.slice(i, i + 500);
+      const batch = db.batch();
+      chunk.forEach((uid) => {
+        const ref = db.collection("notifications").doc();
+        batch.set(ref, {
+          type: String(data.type || "GENERAL"), title, message,
+          actorUid: String(data.actorUid || ""), actorName: String(data.actorName || ""),
+          referenceId: String(data.referenceId || notificationId), route: String(data.route || ""),
+          recipientUid: uid, read: false, fanout: true, sourceNotificationId: notificationId,
+          createdAt: data.createdAt || FieldValue.serverTimestamp()
+        });
       });
-    });
-    await batch.commit();
+      await batch.commit();
+    }
   }
-  return { deliveryStatus: "SENT", recipientCount: recipients.length, tokenCount: tokens.length, successCount: response.successCount, failureCount: response.failureCount };
+
+  return {
+    deliveryStatus: "SENT",
+    recipientCount: recipients.length,
+    tokenCount: recipientTokens.length,
+    successCount,
+    failureCount
+  };
 }
 
 exports.sendShahErpNotification = onDocumentCreated("notifications/{notificationId}", async (event) => {
@@ -215,4 +241,59 @@ exports.saveEmployeeProfileAsAdmin = onCall(async (request) => {
   }, { merge: true });
 
   return { success: true, uid };
+});
+
+
+const SHEETS_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbxIkez5x0tAb7eSp2FgWBn43u-RKlz6Z997IHR7DtyqnblfIBOWBpeXRkSs1r8m6tfK/exec";
+const SHEETS_WEBHOOK_KEY = defineSecret("SHEETS_WEBHOOK_KEY");
+
+exports.syncGoogleSheets = require("firebase-functions/v2/https").onRequest({ secrets: [SHEETS_WEBHOOK_KEY] }, async (req, res) => {
+  if (req.method !== "POST") {
+    return res.status(405).json({ status: "ERROR", message: "POST required" });
+  }
+
+  try {
+    const authorization = String(req.get("authorization") || "");
+    const match = authorization.match(/^Bearer\s+(.+)$/i);
+    if (!match) return res.status(401).json({ status: "ERROR", message: "Authentication required" });
+
+    const decoded = await adminAuth.verifyIdToken(match[1]);
+    await requireActiveAdmin(decoded.uid);
+
+    const response = await fetch(SHEETS_WEBHOOK_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-ERP-Webhook-Key": SHEETS_WEBHOOK_KEY.value() },
+      body: JSON.stringify({ ...(req.body || {}), webhookKey: SHEETS_WEBHOOK_KEY.value() })
+    });
+
+    const text = await response.text();
+    let body;
+    try {
+      body = JSON.parse(text);
+    } catch (_) {
+      body = { status: "ERROR", message: "Invalid response from Sheets backend" };
+    }
+
+    if (!response.ok || body.status !== "SUCCESS") {
+      logger.error("Google Sheets sync rejected", {
+        httpStatus: response.status,
+        responseStatus: body.status
+      });
+      return res.status(502).json({
+        status: "ERROR",
+        message: body.message || "Google Sheets sync failed"
+      });
+    }
+
+    return res.status(200).json(body);
+  } catch (error) {
+    if (error.code === "auth/id-token-expired" || error.code === "auth/argument-error") {
+      return res.status(401).json({ status: "ERROR", message: "Invalid authentication token" });
+    }
+    if (error instanceof HttpsError && error.code === "permission-denied") {
+      return res.status(403).json({ status: "ERROR", message: error.message });
+    }
+    logger.error("Google Sheets proxy failed", error);
+    return res.status(500).json({ status: "ERROR", message: "Google Sheets sync unavailable" });
+  }
 });

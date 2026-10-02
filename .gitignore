@@ -1,5 +1,15 @@
-# Project exclude paths
-/.gradle/
-/app/build/
-/app/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/
-/build/
+# Android / Gradle
+.gradle/
+build/
+**/build/
+local.properties
+
+# Android Studio
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Firebase / local tooling
+.firebase/

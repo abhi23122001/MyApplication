@@ -28,14 +28,12 @@ class ExpenseRepository(
         return uid
     }
 
-    suspend fun getExpensesForUser(uid: String): List<ExpenseRecord> = try {
+    suspend fun getExpensesForUser(uid: String): List<ExpenseRecord> {
         val currentUid = requireCurrentUid()
         require(uid == currentUid) { "Users may only access their own expenses" }
-        expensesCollection.whereEqualTo("uid", currentUid).get().await()
+        return expensesCollection.whereEqualTo("uid", currentUid).get().await()
             .toObjects(ExpenseRecord::class.java)
             .sortedByDescending { it.date?.seconds ?: 0L }
-    } catch (_: Exception) {
-        emptyList()
     }
 
     suspend fun getAllExpenses(): List<ExpenseRecord> {

@@ -45,6 +45,46 @@ class AdminViewModel(
     var presentCount by mutableIntStateOf(0); private set
     var absentCount by mutableIntStateOf(0); private set
 
+    private val dataSyncRepository = DataSyncRepository(firestore)
+    var showSyncDialog by mutableStateOf(false); private set
+    var isSyncingToSheets by mutableStateOf(false); private set
+    var syncProgressStatus by mutableStateOf("Preparing sync..."); private set
+    var syncProgressPercent by mutableStateOf(0f); private set
+    var lastSyncResult by mutableStateOf<SyncResult?>(null); private set
+
+    fun syncAllDataToGoogleSheets() {
+        if (isSyncingToSheets) return
+        showSyncDialog = true
+        isSyncingToSheets = true
+        syncProgressStatus = "Preparing Google Sheets sync..."
+        syncProgressPercent = 0f
+        lastSyncResult = null
+        viewModelScope.launch {
+            try {
+                lastSyncResult = dataSyncRepository.syncAllFirestoreDataToGoogleSheets { status, progress ->
+                    syncProgressStatus = status
+                    syncProgressPercent = progress.coerceIn(0f, 1f)
+                }
+            } catch (e: Exception) {
+                lastSyncResult = SyncResult(
+                    isSuccess = false,
+                    message = e.localizedMessage ?: "Google Sheets sync failed"
+                )
+            } finally {
+                isSyncingToSheets = false
+            }
+        }
+    }
+
+    fun dismissSyncDialog() {
+        if (!isSyncingToSheets) {
+            showSyncDialog = false
+            lastSyncResult = null
+            syncProgressStatus = ""
+            syncProgressPercent = 0f
+        }
+    }
+
     val companyProfile: StateFlow<CompanyProfile?> = billingRepository.companyProfile.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
     val bankDetails: StateFlow<BankDetails?> = billingRepository.bankDetails.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
     val allTerms: StateFlow<List<TermConditionEntity>> = billingRepository.allTerms.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -71,11 +111,17 @@ class AdminViewModel(
     private suspend fun loadTodayAttendance() {
         val attendanceList = try { attendanceRepository.getTodayAllAttendance() } catch (_: Exception) { emptyList() }
         val sortedAttendance = attendanceList.sortedByDescending { it.punchInTime?.seconds ?: 0L }
-        attendanceSummary = sortedAttendance; presentCount = sortedAttendance.size
+        attendanceSummary = sortedAttendance
+        presentCount = sortedAttendance.count { it.status.equals("PRESENT", ignoreCase = true) }
         val existingUids = allEmployees.map { it.uid }.toHashSet()
         val missingProfiles = sortedAttendance.filter { it.uid.isNotBlank() && it.uid !in existingUids }.map { UserProfile(uid = it.uid, name = it.userName, role = "employee", approved = true, active = true) }
         if (missingProfiles.isNotEmpty()) allEmployees = allEmployees + missingProfiles
-        absentCount = (allEmployees.count { it.active } - presentCount).coerceAtLeast(0)
+        val activeEmployeeUids = allEmployees.filter { it.active }.map { it.uid }.toSet()
+        val presentEmployeeUids = sortedAttendance
+            .filter { it.status.equals("PRESENT", ignoreCase = true) && it.uid in activeEmployeeUids }
+            .map { it.uid }
+            .toSet()
+        absentCount = (activeEmployeeUids.size - presentEmployeeUids.size).coerceAtLeast(0)
     }
 
     fun refreshAttendance() { if (isLoading) return; viewModelScope.launch { isLoading = true; try { allEmployees = userRepository.getAllEmployees(); loadTodayAttendance() } catch (e: Exception) { errorMessage = e.localizedMessage ?: "Unable to refresh attendance" } finally { isLoading = false } } }
