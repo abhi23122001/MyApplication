@@ -1,5 +1,5 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
-const { onDocumentCreated } = require("firebase-functions/v2/firestore");
+const { onDocumentCreated, onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { logger } = require("firebase-functions");
 const { defineSecret } = require("firebase-functions/params");
 const { initializeApp } = require("firebase-admin/app");
@@ -297,3 +297,220 @@ exports.syncGoogleSheets = require("firebase-functions/v2/https").onRequest({ se
     return res.status(500).json({ status: "ERROR", message: "Google Sheets sync unavailable" });
   }
 });
+
+
+// -------------------------------------------------------------------------
+// REAL-TIME FIRESTORE -> GOOGLE SHEETS SYNC
+// -------------------------------------------------------------------------
+
+function sheetsDate_(value) {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (value.toDate) {
+    const d = value.toDate();
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit"
+    }).format(d);
+  }
+  return "";
+}
+
+function sheetsTime_(value) {
+  if (!value) return "";
+  const d = value.toDate ? value.toDate() : (value instanceof Date ? value : null);
+  if (!d) return String(value);
+  return new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true
+  }).format(d);
+}
+
+async function userForSheets_(uid) {
+  if (!uid) return {};
+  const snap = await db.collection("users").doc(uid).get();
+  return snap.exists ? (snap.data() || {}) : {};
+}
+
+async function postSheetsAction_(payload) {
+  const response = await fetch(SHEETS_WEBHOOK_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...payload, webhookKey: SHEETS_WEBHOOK_KEY.value() })
+  });
+  const text = await response.text();
+  let body = {};
+  try { body = JSON.parse(text); } catch (_) {}
+  if (!response.ok || body.status !== "SUCCESS") {
+    throw new Error(body.message || ("Sheets webhook HTTP " + response.status));
+  }
+  return body;
+}
+
+exports.syncAttendanceToGoogleSheets = onDocumentWritten(
+  { document: "attendance/{attendanceId}", secrets: [SHEETS_WEBHOOK_KEY] },
+  async (event) => {
+    const after = event.data?.after;
+    const before = event.data?.before;
+    const data = after?.exists ? (after.data() || {}) : (before?.data() || {});
+    const uid = String(data.uid || data.employeeUid || data.userUid || "").trim();
+    const user = await userForSheets_(uid);
+    const empId = String(data.employeeId || user.employeeId || user.empId || uid).trim();
+    const empName = String(data.userName || data.staffName || data.employeeName || user.name || "Employee").trim();
+    const date = String(data.date || sheetsDate_(data.punchInTime) || "").trim();
+
+    if (!after?.exists) {
+      return postSheetsAction_({
+        action: "ATTENDANCE_DELETE", EmployeeID: empId, EmployeeName: empName, date
+      });
+    }
+
+    const punchIn = sheetsTime_(data.punchInTime);
+    const punchOut = sheetsTime_(data.punchOutTime);
+    const minutes = Number(data.workingMinutes || 0);
+    const workingHours = minutes > 0
+      ? Math.floor(minutes / 60) + "h " + (minutes % 60) + "m"
+      : "";
+
+    return postSheetsAction_({
+      action: "ATTENDANCE_SYNC",
+      EmployeeID: empId,
+      employeeId: empId,
+      EmployeeName: empName,
+      staffName: empName,
+      date,
+      status: String(data.status || "PRESENT"),
+      punchType: punchOut ? "PUNCH_OUT" : "PUNCH_IN",
+      checkIn: punchIn,
+      checkOut: punchOut,
+      workingHours,
+      siteName: String(data.siteName || data.workArea || ""),
+      remarks: String(data.remarks || ""),
+      lat: String(data.punchInLat || ""),
+      lng: String(data.punchInLng || "")
+    });
+  }
+);
+
+exports.syncExpenseToGoogleSheets = onDocumentWritten(
+  { document: "expenses/{expenseId}", secrets: [SHEETS_WEBHOOK_KEY] },
+  async (event) => {
+    const after = event.data?.after;
+    const before = event.data?.before;
+    const data = after?.exists ? (after.data() || {}) : (before?.data() || {});
+    const uid = String(data.uid || data.employeeUid || "").trim();
+    const user = await userForSheets_(uid);
+    const empId = String(data.employeeId || user.employeeId || user.empId || uid).trim();
+    const empName = String(data.userName || data.employeeName || data.staffName || user.name || "Employee").trim();
+    const expenseId = event.params.expenseId;
+
+    if (!after?.exists) {
+      return postSheetsAction_({
+        action: "EXPENSE_DELETE", expenseId, EmployeeID: empId, EmployeeName: empName
+      });
+    }
+
+    return postSheetsAction_({
+      action: "EXPENSE_SYNC",
+      expenseId,
+      EmployeeID: empId,
+      employeeId: empId,
+      EmployeeName: empName,
+      date: String(data.dateText || data.date || sheetsDate_(data.createdAt) || ""),
+      category: String(data.category || ""),
+      description: String(data.title || data.description || data.remarks || ""),
+      amount: Number(data.amount || 0),
+      paymentMode: String(data.paymentMode || ""),
+      status: String(data.status || "PENDING"),
+      receiptUrl: String(data.receiptUrl || "")
+    });
+  }
+);
+
+exports.syncLeaveToGoogleSheets = onDocumentWritten(
+  { document: "leaveRequests/{leaveId}", secrets: [SHEETS_WEBHOOK_KEY] },
+  async (event) => {
+    const after = event.data?.after;
+    if (!after?.exists) return null;
+    const data = after.data() || {};
+    const uid = String(data.uid || data.employeeUid || "").trim();
+    const user = await userForSheets_(uid);
+    const empId = String(data.employeeId || user.employeeId || user.empId || uid).trim();
+    const empName = String(data.employeeName || data.userName || data.staffName || user.name || "Employee").trim();
+    return postSheetsAction_({
+      action: "LEAVE_SYNC", leaveId: event.params.leaveId,
+      EmployeeID: empId, EmployeeName: empName,
+      startDate: String(data.startDate || ""), endDate: String(data.endDate || ""),
+      totalDays: Number(data.totalDays || 0), leaveType: String(data.leaveType || ""),
+      reason: String(data.reason || ""), status: String(data.status || "PENDING")
+    });
+  }
+);
+
+exports.syncAdvanceToGoogleSheets = onDocumentWritten(
+  { document: "advanceSalaryRequests/{advanceId}", secrets: [SHEETS_WEBHOOK_KEY] },
+  async (event) => {
+    const after = event.data?.after;
+    if (!after?.exists) return null;
+    const data = after.data() || {};
+    const uid = String(data.uid || data.employeeUid || "").trim();
+    const user = await userForSheets_(uid);
+    const empId = String(data.employeeId || user.employeeId || user.empId || uid).trim();
+    const empName = String(data.employeeName || data.userName || user.name || "Employee").trim();
+    return postSheetsAction_({
+      action: "ADVANCE_SALARY_SYNC", advanceId: event.params.advanceId,
+      EmployeeID: empId, EmployeeName: empName,
+      requestedMonth: String(data.requestedMonth || ""),
+      requestedAmount: Number(data.requestedAmount || 0),
+      approvedAmount: Number(data.approvedAmount || 0),
+      installments: Number(data.installments || 0),
+      reason: String(data.reason || ""), status: String(data.status || "PENDING")
+    });
+  }
+);
+
+exports.syncPayrollToGoogleSheets = onDocumentWritten(
+  { document: "payrollRecords/{payrollId}", secrets: [SHEETS_WEBHOOK_KEY] },
+  async (event) => {
+    const after = event.data?.after;
+    if (!after?.exists) return null;
+    const data = after.data() || {};
+    const uid = String(data.uid || data.employeeUid || "").trim();
+    const user = await userForSheets_(uid);
+    return postSheetsAction_({
+      action: "SYNC_PAYROLL",
+      EmployeeID: String(data.employeeId || user.employeeId || user.empId || uid),
+      EmployeeName: String(data.employeeName || data.name || user.name || "Employee"),
+      month: String(data.salaryMonth || data.month || ""),
+      department: String(data.department || data.dept || user.department || ""),
+      role: String(data.role || user.role || ""),
+      baseMonthlySalary: Number(data.baseMonthlySalary || 0),
+      dailyRate: Number(data.dailyRate || 0),
+      totalDaysInMonth: Number(data.totalDaysInMonth || 0),
+      workingDaysInMonth: Number(data.workingDaysInMonth || 0),
+      presentDays: Number(data.presentDays || 0), halfDays: Number(data.halfDays || 0),
+      approvedLeaveDays: Number(data.approvedLeaveDays || 0), absentDays: Number(data.absentDays || 0),
+      grossSalaryEarned: Number(data.grossSalaryEarned || 0),
+      advanceDeduction: Number(data.advanceDeduction || 0),
+      absenceDeduction: Number(data.absenceDeduction || 0),
+      netSalary: Number(data.netSalary || 0), status: String(data.status || "")
+    });
+  }
+);
+
+exports.syncDsrToGoogleSheets = onDocumentWritten(
+  { document: "daily_reports/{dsrId}", secrets: [SHEETS_WEBHOOK_KEY] },
+  async (event) => {
+    const after = event.data?.after;
+    if (!after?.exists) return null;
+    const data = after.data() || {};
+    const uid = String(data.uid || data.employeeUid || "").trim();
+    const user = await userForSheets_(uid);
+    return postSheetsAction_({
+      action: "DSR_SYNC", dsrId: event.params.dsrId,
+      EmployeeID: String(data.employeeId || user.employeeId || user.empId || uid),
+      EmployeeName: String(data.employeeName || data.userName || user.name || "Employee"),
+      date: String(data.date || ""), chainage: String(data.chainage || ""),
+      points: String(data.points || ""), area: String(data.area || ""),
+      instrument: String(data.instrument || ""), remarks: String(data.remarks || "")
+    });
+  }
+);
