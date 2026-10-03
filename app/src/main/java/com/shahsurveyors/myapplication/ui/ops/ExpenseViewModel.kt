@@ -75,7 +75,7 @@ class ExpenseViewModel(
                 val bytes = withContext(Dispatchers.Default) {
                     BitmapUtils.compressBitmap(receiptBitmap, 1024, 500, 80)
                 }
-                val receiptUrl = storageRepository.uploadBytes(FirebaseConstants.STORAGE_RECEIPTS, bytes)
+                val receiptUrl = storageRepository.uploadBytes(FirebaseConstants.STORAGE_RECEIPTS, uid, bytes)
 
                 statusMessage = "Saving expense..."
                 val expense = ExpenseRecord(
