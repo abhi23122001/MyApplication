@@ -7,18 +7,18 @@ import kotlinx.coroutines.tasks.await
 class StorageRepository(
     private val storage: FirebaseStorage = FirebaseStorage.getInstance()
 ) {
-
     /**
-     * Uploads an attendance selfie to Firebase Storage and returns its download URL.
-     *
-     * This replaces the old Supabase dependency so attendance uses the same
-     * Firebase project as Authentication, Firestore and the rest of the ERP.
+     * Attendance selfies are stored under the authenticated user's UID.
+     * This matches storage.rules: attendance/selfies/{uid}/{fileName}
      */
     suspend fun uploadBytes(
         path: String,
+        uid: String,
         bytes: ByteArray
     ): String {
-        val fileName = "${path.trimEnd('/')}/${java.util.UUID.randomUUID()}.jpg"
+        require(uid.isNotBlank()) { "User ID is missing" }
+
+        val fileName = path.trimEnd('/') + "/" + uid + "/" + java.util.UUID.randomUUID() + ".jpg"
         val reference = storage.reference.child(fileName)
 
         reference.putBytes(bytes).await()
@@ -27,9 +27,12 @@ class StorageRepository(
 
     suspend fun uploadFile(
         path: String,
+        uid: String,
         uri: Uri
     ): String {
-        val fileName = "${path.trimEnd('/')}/${java.util.UUID.randomUUID()}.jpg"
+        require(uid.isNotBlank()) { "User ID is missing" }
+
+        val fileName = path.trimEnd('/') + "/" + uid + "/" + java.util.UUID.randomUUID() + ".jpg"
         val reference = storage.reference.child(fileName)
 
         reference.putFile(uri).await()
