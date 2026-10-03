@@ -226,6 +226,7 @@ class AttendanceViewModel(
 
                             storageRepository.uploadBytes(
                                 FirebaseConstants.STORAGE_SELFIES,
+                                uid,
                                 bytes
                             )
                         }
