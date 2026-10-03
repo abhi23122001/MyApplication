@@ -2,20 +2,26 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
+
     function signedIn() {
       return request.auth != null;
     }
 
     function userData() {
-      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+      return firestore.get(
+        /databases/(default)/documents/users/$(request.auth.uid)
+      ).data;
     }
 
     function isActive() {
-      return signedIn() && userData().get('active', false) == true && userData().get('approved', false) == true;
+      return signedIn()
+        && userData().get('active', false) == true
+        && userData().get('approved', false) == true;
     }
 
     function isAdmin() {
-      return isActive() && userData().get('role', '').matches('(?i)^ADMIN$');
+      return isActive()
+        && userData().get('role', '').matches('(?i)^ADMIN$');
     }
 
     function hasModule(module) {
@@ -33,25 +39,33 @@ service firebase.storage {
       return signedIn() && uid == request.auth.uid;
     }
 
+    // Attendance selfie:
+    // Users can access only their own selfie folder.
     match /attendance/selfies/{uid}/{fileName} {
-      allow read, write: if isOwner(uid) && hasModule('ATTENDANCE');
-      allow read, write: if isAdmin();
+      allow read, write: if isOwner(uid);
     }
 
+    // Expense receipts:
+    // User must have EXPENSE access; admins have full access.
     match /expenses/receipts/{uid}/{fileName} {
       allow read, write: if isOwner(uid) && hasModule('EXPENSE');
       allow read, write: if isAdmin();
     }
 
+    // DSR photos:
+    // User must have DSR access; admins have full access.
     match /dsr/photos/{uid}/{fileName} {
       allow read, write: if isOwner(uid) && hasModule('DSR');
       allow read, write: if isAdmin();
     }
 
+    // Billing documents:
+    // Admin only.
     match /billing/documents/{uid}/{fileName} {
       allow read, write: if isAdmin();
     }
 
+    // Everything else denied.
     match /{allPaths=**} {
       allow read, write: if false;
     }
